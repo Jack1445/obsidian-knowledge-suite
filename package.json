@@ -1,0 +1,19 @@
+{
+  "name": "obsidian-knowledge-suite",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Unified source, build, and release workspace for Knowledge Map and Excalidraw Custom.",
+  "scripts": {
+    "install:suite": "node scripts/install-suite.mjs",
+    "test:suite": "node scripts/test-suite.mjs",
+    "build:suite": "node scripts/build-suite.mjs",
+    "package:suite": "node scripts/package-suite.mjs",
+    "release:suite": "node scripts/build-suite.mjs && node scripts/package-suite.mjs",
+    "deploy:test": "node scripts/deploy-test-vault.mjs",
+    "verify:suite": "node scripts/verify-suite.mjs"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

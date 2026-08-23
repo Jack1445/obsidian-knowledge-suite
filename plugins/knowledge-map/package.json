@@ -1,0 +1,42 @@
+{
+  "name": "obsidian-knowledge-map",
+  "version": "0.1.0",
+  "description": "A folder-aware, persistent knowledge map for Obsidian.",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "knowledge-map",
+    "graph",
+    "notes"
+  ],
+  "author": "Jack1445",
+  "license": "MIT",
+  "dependencies": {
+    "katex": "^0.17.0",
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.0.0",
+    "@types/three": "^0.184.1",
+    "esbuild": "^0.25.5",
+    "eslint": "^9.39.4",
+    "eslint-plugin-obsidianmd": "^0.4.0",
+    "globals": "^17.6.0",
+    "jiti": "^2.6.1",
+    "obsidian": "latest",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.59.1",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Component build outputs
+packages/excalidraw-core-custom/packages/excalidraw/dist/
+packages/excalidraw-core-custom/packages/excalidraw/types/
+plugins/excalidraw-custom/dist/
+plugins/excalidraw-custom/lib/
+plugins/excalidraw-custom/main.js
+plugins/knowledge-map/main.js
+
+# Suite release outputs
+release/
+
+# Local environment
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db
+

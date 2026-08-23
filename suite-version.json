@@ -1,0 +1,17 @@
+{
+  "suiteVersion": "1.0.0",
+  "components": {
+    "excalidrawCore": {
+      "version": "0.18.118",
+      "sourceCommit": "0cb1b9ffe2cb6af03694680667c9cd18b27119a3"
+    },
+    "excalidrawPlugin": {
+      "version": "2.26.4",
+      "sourceCommit": "ca395d23a6f07a24625da35f9eb905a3d07e8103"
+    },
+    "knowledgeMap": {
+      "version": "0.1.0",
+      "sourceCommit": "7a99731cea70f456602a766dea3f503a72c53424"
+    }
+  }
+}

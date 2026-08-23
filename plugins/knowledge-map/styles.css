@@ -1,0 +1,727 @@
+.knowledge-map {
+	--knowledge-map-note: var(--color-blue);
+	--knowledge-map-folder: var(--color-orange);
+	--knowledge-map-current: var(--interactive-accent);
+	--knowledge-map-external: var(--text-faint);
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 0;
+	background: var(--background-primary);
+	color: var(--text-normal);
+}
+
+.knowledge-map__toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	min-height: 42px;
+	padding: var(--size-4-1) var(--size-4-2);
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: var(--background-primary-alt);
+}
+
+.knowledge-map__toolbar-group {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-1);
+}
+
+.knowledge-map__toolbar-group.is-actions {
+	margin-inline-start: auto;
+}
+
+.knowledge-map__toolbar-action {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--size-2-1);
+	padding: 4px 8px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.knowledge-map__toolbar-action:hover {
+	border-color: var(--background-modifier-border-hover);
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.knowledge-map__toolbar-action svg {
+	width: 15px;
+	height: 15px;
+}
+
+.knowledge-map__slider {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-1);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+}
+
+.knowledge-map__slider input {
+	width: 76px;
+	margin: 0;
+}
+
+@media (max-width: 780px) {
+	.knowledge-map__toolbar-action span {
+		display: none;
+	}
+
+	.knowledge-map__slider span {
+		display: none;
+	}
+
+	.knowledge-map__slider input {
+		width: 56px;
+	}
+}
+
+.knowledge-map__breadcrumbs {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-1);
+	min-width: 0;
+	overflow-x: auto;
+	white-space: nowrap;
+}
+
+.knowledge-map__breadcrumbs button {
+	padding: 2px 4px;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.knowledge-map__breadcrumbs button:hover {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.knowledge-map__breadcrumb-separator {
+	color: var(--text-faint);
+}
+
+.knowledge-map__graph {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	background-color: var(--background-primary);
+	background-image: radial-gradient(circle, var(--background-modifier-border) 0.7px, transparent 0.8px);
+	background-size: 24px 24px;
+}
+
+.knowledge-map__svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	touch-action: none;
+	cursor: grab;
+	user-select: none;
+}
+
+.knowledge-map__svg:active {
+	cursor: grabbing;
+}
+
+.knowledge-map__edge {
+	fill: none;
+	stroke: var(--text-faint);
+	stroke-width: calc(1.1px * var(--knowledge-map-link-scale, 1));
+	stroke-opacity: 0.52;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	vector-effect: non-scaling-stroke;
+	transition: stroke-opacity 120ms ease, stroke-width 120ms ease;
+}
+
+.knowledge-map__edge.is-containment {
+	stroke: color-mix(in srgb, var(--color-orange) 72%, var(--text-muted));
+	stroke-opacity: 0.72;
+}
+
+.knowledge-map__edge.is-link {
+	stroke: color-mix(in srgb, var(--color-blue) 78%, var(--text-muted));
+	stroke-dasharray: 6 5;
+	stroke-opacity: 0.7;
+}
+
+.knowledge-map__edge.is-highlighted {
+	stroke: var(--interactive-accent);
+	stroke-width: calc(1.8px * var(--knowledge-map-link-scale, 1));
+	stroke-opacity: 0.95;
+}
+
+.knowledge-map__node {
+	cursor: pointer;
+	outline: none;
+	transition: opacity 120ms ease;
+}
+
+.knowledge-map__node.is-dimmed {
+	opacity: 0.2;
+}
+
+.knowledge-map__node-halo {
+	fill: transparent;
+	transition: fill 120ms ease;
+}
+
+.knowledge-map__node:hover .knowledge-map__node-halo,
+.knowledge-map__node:focus-visible .knowledge-map__node-halo {
+	fill: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+}
+
+.knowledge-map__node-circle {
+	fill: var(--knowledge-map-note);
+	stroke: var(--background-primary);
+	stroke-width: 2px;
+	filter: drop-shadow(0 1px 2px rgb(0 0 0 / 18%));
+	transform: scale(var(--knowledge-map-node-scale, 1));
+	transition: transform 120ms ease, filter 120ms ease;
+}
+
+.knowledge-map__node:hover .knowledge-map__node-circle,
+.knowledge-map__node:focus-visible .knowledge-map__node-circle {
+	transform: scale(calc(var(--knowledge-map-node-scale, 1) * 1.18));
+	filter: drop-shadow(0 2px 5px rgb(0 0 0 / 25%));
+}
+
+.knowledge-map__node.is-folder .knowledge-map__node-circle {
+	fill: var(--knowledge-map-folder);
+}
+
+.knowledge-map__node.is-current-folder .knowledge-map__node-circle {
+	fill: var(--knowledge-map-current);
+	stroke-width: 3px;
+}
+
+.knowledge-map__node.is-current-folder .knowledge-map__node-halo {
+	fill: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+}
+
+.knowledge-map__node.is-external-note {
+	opacity: 0.55;
+}
+
+.knowledge-map__node.is-external-note .knowledge-map__node-circle {
+	fill: var(--knowledge-map-external);
+	stroke-dasharray: 2 2;
+}
+
+.knowledge-map__node-label {
+	fill: var(--text-muted);
+	font-family: var(--font-interface);
+	font-size: calc(var(--font-ui-smaller) / var(--knowledge-map-node-scale, 1));
+	paint-order: stroke;
+	stroke: var(--background-primary);
+	stroke-width: 3px;
+	stroke-linejoin: round;
+	pointer-events: none;
+}
+
+.knowledge-map__node.is-folder .knowledge-map__node-label,
+.knowledge-map__node.is-current-folder .knowledge-map__node-label {
+	fill: var(--text-normal);
+	font-weight: var(--font-semibold);
+}
+
+.knowledge-map__empty {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	z-index: 1;
+	max-width: 280px;
+	padding: var(--size-4-3) var(--size-4-4);
+	transform: translate(-50%, 80px);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-primary-alt);
+	box-shadow: var(--shadow-s);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	text-align: center;
+	pointer-events: none;
+}
+
+.knowledge-map__legend {
+	position: absolute;
+	bottom: var(--size-4-3);
+	left: var(--size-4-3);
+	z-index: 2;
+	display: flex;
+	gap: var(--size-4-3);
+	padding: 5px 9px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: color-mix(in srgb, var(--background-primary) 92%, transparent);
+	box-shadow: var(--shadow-s);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	pointer-events: none;
+}
+
+.knowledge-map__legend-item {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	white-space: nowrap;
+}
+
+.knowledge-map__legend-line {
+	display: inline-block;
+	width: 24px;
+	height: 0;
+	border-top: 2px solid color-mix(in srgb, var(--color-orange) 72%, var(--text-muted));
+}
+
+.knowledge-map__legend-line.is-link {
+	border-color: color-mix(in srgb, var(--color-blue) 78%, var(--text-muted));
+	border-top-style: dashed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.knowledge-map__edge,
+	.knowledge-map__node,
+	.knowledge-map__node-circle,
+	.knowledge-map__node-halo {
+		transition: none;
+	}
+}
+
+.knowledge-map-globe {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 0;
+	background: #040611;
+}
+
+.knowledge-map-globe__toolbar {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	min-height: 42px;
+	padding: var(--size-4-1) var(--size-4-2);
+	border-bottom: 1px solid rgb(255 255 255 / 10%);
+	background: #090c18;
+	color: #e8edf7;
+}
+
+.knowledge-map-globe__title {
+	flex: 1;
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-semibold);
+}
+
+.knowledge-map-globe__stage {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.knowledge-map-globe__canvas,
+.knowledge-map-globe__labels {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.knowledge-map-globe__labels {
+	pointer-events: none;
+}
+
+.knowledge-map-globe__label {
+	position: absolute;
+	top: 0;
+	left: 0;
+	max-width: 140px;
+	padding: 5px 9px;
+	overflow: hidden;
+	border: 1px solid rgb(132 187 255 / 55%);
+	border-radius: 999px;
+	background: rgb(9 18 36 / 82%);
+	box-shadow: 0 3px 14px rgb(0 0 0 / 45%), 0 0 12px rgb(93 162 255 / 18%);
+	color: #eff6ff !important;
+	font-size: 11px;
+	line-height: 1.25;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: auto;
+	touch-action: none;
+	transition: opacity 100ms ease, border-color 100ms ease;
+}
+
+.knowledge-map-globe__label:hover,
+.knowledge-map-globe__label:focus-visible {
+	border-color: #fff;
+	background: rgb(18 37 70 / 94%);
+}
+
+.knowledge-map-globe__label.is-folder {
+	border-color: rgb(251 191 36 / 75%);
+	background: rgb(74 49 13 / 90%);
+	color: #fff8dc !important;
+	font-weight: var(--font-medium);
+}
+
+.knowledge-map-globe__label.is-external-note {
+	opacity: 0.6;
+}
+
+.knowledge-map-globe__label.is-hidden {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.knowledge-map-canvas-list {
+	display: grid;
+	gap: var(--size-2-1);
+	max-height: 320px;
+	overflow-y: auto;
+}
+
+.knowledge-map-canvas-list__item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--size-4-3);
+	width: 100%;
+	padding: var(--size-4-2) var(--size-4-3);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary-alt);
+	box-shadow: none;
+	text-align: start;
+}
+
+.knowledge-map-canvas-list__item:hover {
+	border-color: var(--background-modifier-border-hover);
+	background: var(--background-modifier-hover);
+}
+
+.knowledge-map-canvas-list__name {
+	overflow: hidden;
+	color: var(--text-normal);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.knowledge-map-canvas-list__path {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+/* A real option inside Excalidraw's three-dot tool menu, only for knowledge canvases. */
+.excalidraw .knowledge-map-excalidraw-reset-menu {
+	display: flex;
+	flex-direction: column;
+	margin-top: 5px;
+	padding-top: 5px;
+	border-top: 1px solid var(--default-border-color);
+}
+
+.excalidraw .knowledge-map-excalidraw-reset-menu .dropdown-menu-item {
+	width: 100%;
+}
+
+.excalidraw .knowledge-map-excalidraw-reset-menu__icon {
+	display: inline-flex;
+}
+
+/* Knowledge-canvas-only text weight control, inserted into Excalidraw's font row. */
+.excalidraw .panelColumn .buttonList.knowledge-map-excalidraw-font-row,
+.excalidraw .knowledge-map-excalidraw-font-row {
+	width: 13rem;
+	max-width: 13rem;
+	flex-wrap: nowrap;
+	gap: 0.2rem;
+}
+
+.excalidraw .knowledge-map-excalidraw-font-row > * {
+	flex: 0 0 var(--default-button-size);
+}
+
+.excalidraw .knowledge-map-excalidraw-bold-button {
+	flex: 0 0 var(--default-button-size);
+	display: inline-grid;
+	place-items: center;
+}
+
+.excalidraw .knowledge-map-excalidraw-bold-button.is-active .ToolIcon__icon {
+	background: var(--color-primary);
+	color: var(--text-on-accent);
+}
+
+.excalidraw .knowledge-map-excalidraw-bold-letter {
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 24px;
+	font-weight: 800;
+	line-height: 1;
+}
+
+/* Formula editor ported from Knowledge-main's warm, restrained note UI. */
+.knowledge-map-formula-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1090;
+	background: transparent;
+}
+
+.knowledge-map-formula-dialog {
+	--knowledge-formula: #c0564e;
+	--knowledge-formula-strong: #a8473f;
+	--knowledge-formula-soft: #f7ece9;
+	position: fixed;
+	z-index: 1091;
+	display: flex;
+	flex-direction: column;
+	overflow: visible;
+	border: 1px solid color-mix(in srgb, var(--background-modifier-border) 80%, #9a8778);
+	border-radius: 12px;
+	background: var(--background-primary);
+	box-shadow: 0 16px 48px rgb(20 20 18 / 18%);
+	color: var(--text-normal);
+}
+
+.knowledge-map-formula-tabs {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.knowledge-map-formula-tabs button {
+	min-width: 38px;
+	padding: 4px 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: 14px;
+}
+
+.knowledge-map-formula-tabs button:hover,
+.knowledge-map-formula-tabs button.is-active {
+	background: var(--knowledge-formula-soft);
+	color: var(--knowledge-formula);
+}
+
+.knowledge-map-formula-help {
+	margin-left: auto;
+	color: var(--text-faint);
+	font-size: 12px;
+	text-decoration: none;
+}
+
+.knowledge-map-formula-help:hover {
+	color: var(--knowledge-formula);
+	text-decoration: underline;
+}
+
+.knowledge-map-formula-editor {
+	position: relative;
+	min-height: 84px;
+	margin: 10px 12px 6px;
+	background: var(--background-primary-alt);
+	border-radius: 8px;
+}
+
+.knowledge-map-formula-highlight,
+.knowledge-map-formula-input {
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 84px;
+	margin: 0;
+	padding: 8px 10px;
+	overflow: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 13px;
+	font-weight: 400;
+	letter-spacing: 0;
+	line-height: 1.7;
+	tab-size: 2;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.knowledge-map-formula-highlight {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	pointer-events: none;
+	border-color: transparent;
+	background: transparent;
+	color: var(--text-normal);
+}
+
+.knowledge-map-formula-input {
+	position: relative;
+	z-index: 1;
+	display: block;
+	resize: vertical;
+	background: var(--background-primary-alt);
+	color: transparent;
+	caret-color: var(--text-normal);
+	-webkit-text-fill-color: transparent;
+}
+
+.knowledge-map-formula-input::placeholder {
+	color: var(--text-faint);
+	-webkit-text-fill-color: var(--text-faint);
+}
+
+.knowledge-map-formula-input:focus {
+	border-color: color-mix(in srgb, var(--knowledge-formula) 55%, transparent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--knowledge-formula-soft) 85%, transparent);
+	outline: none;
+}
+
+.knowledge-map-formula-command {
+	color: var(--knowledge-formula);
+}
+
+.knowledge-map-formula-preview {
+	display: grid;
+	min-height: 76px;
+	place-items: center;
+	margin: 0 12px 10px;
+	padding: 12px;
+	overflow: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-primary-alt);
+}
+
+.knowledge-map-formula-preview math {
+	font-family: "Cambria Math", "STIX Two Math", serif;
+	font-size: 1.35em;
+}
+
+.knowledge-map-formula-preview-placeholder,
+.knowledge-map-formula-render-error {
+	color: var(--text-faint);
+	font-size: 13px;
+}
+
+.knowledge-map-formula-symbol-panel {
+	position: absolute;
+	bottom: calc(100% + 6px);
+	left: 0;
+	box-sizing: border-box;
+	width: 100%;
+	max-height: 260px;
+	padding: 8px;
+	overflow: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+	background: var(--background-primary);
+	box-shadow: 0 -8px 32px rgb(20 20 18 / 16%);
+}
+
+.knowledge-map-formula-symbol-group + .knowledge-map-formula-symbol-group {
+	margin-top: 8px;
+}
+
+.knowledge-map-formula-symbol-label {
+	padding: 0 4px 4px;
+	color: var(--text-faint);
+	font-size: 11px;
+}
+
+.knowledge-map-formula-symbol-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.knowledge-map-formula-symbol {
+	display: grid;
+	min-width: 32px;
+	height: 32px;
+	place-items: center;
+	padding: 0 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-normal);
+}
+
+.knowledge-map-formula-symbol:hover {
+	background: var(--knowledge-formula-soft);
+	color: var(--knowledge-formula);
+}
+
+.knowledge-map-formula-symbol math {
+	font-family: "Cambria Math", "STIX Two Math", serif;
+	font-size: 1.05em;
+}
+
+.knowledge-map-formula-measurement {
+	position: fixed;
+	top: -10000px;
+	left: -10000px;
+	z-index: -1;
+	display: inline-block;
+	visibility: hidden;
+	width: max-content;
+	height: max-content;
+	pointer-events: none;
+}
+
+.knowledge-map-formula-export-math {
+	color: #2f2b27;
+	font-family: "Cambria Math", "STIX Two Math", serif;
+	font-size: 28px;
+}
+
+.knowledge-map-formula-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 10px;
+	padding: 8px 12px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.knowledge-map-formula-hint {
+	margin-right: auto;
+	color: var(--text-faint);
+	font-size: 12px;
+}
+
+.knowledge-map-formula-footer button {
+	padding: 6px 12px;
+	border-radius: 8px;
+}
+
+.knowledge-map-formula-confirm {
+	border-color: var(--knowledge-formula) !important;
+	background: var(--knowledge-formula) !important;
+	color: #fff !important;
+}
+
+.knowledge-map-formula-confirm:hover {
+	background: var(--knowledge-formula-strong) !important;
+}
+
+.theme-dark .knowledge-map-formula-dialog {
+	--knowledge-formula: #d98078;
+	--knowledge-formula-strong: #c46c65;
+	--knowledge-formula-soft: rgb(192 86 78 / 18%);
+}

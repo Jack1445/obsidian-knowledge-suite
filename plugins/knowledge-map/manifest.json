@@ -1,0 +1,10 @@
+{
+  "id": "knowledge-map",
+  "name": "Knowledge Map",
+  "version": "0.1.0",
+  "minAppVersion": "1.7.2",
+  "description": "Navigate folders and linked notes in a persistent visual map.",
+  "author": "Jack1445",
+  "authorUrl": "https://github.com/Jack1445",
+  "isDesktopOnly": false
+}
