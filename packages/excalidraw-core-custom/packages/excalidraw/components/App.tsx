@@ -805,6 +805,8 @@ class App extends React.Component<AppProps, AppState> {
       setViewport: this.viewport.setViewport,
       getViewportOffsets: this.viewport.getOffsets,
       getSceneElements: this.getSceneElements,
+      getElementAtPosition: (x, y, opts) =>
+        this.getElementAtPosition(x, y, opts),
       getAppState: () => this.state,
       getFiles: () => this.files,
       getName: this.getName,

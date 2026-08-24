@@ -23,6 +23,7 @@ import {
 	getKnowledgeCanvasFolderActivation,
 	parseKnowledgeCanvasLink,
 	readKnowledgeCanvasData,
+	resolveContextMenuElement,
 	resolveCurrentViewFile,
 	type KnowledgeCanvasAction,
 	type KnowledgeCanvasElementData,
@@ -81,7 +82,17 @@ interface ExcalidrawViewLike {
 	excalidrawAPI?: {
 		getAppState(): {
 			editingTextElement?: ExcalidrawElementLike | null;
+			zoom?: { value: number };
+			offsetLeft?: number;
+			offsetTop?: number;
+			scrollX?: number;
+			scrollY?: number;
 		};
+		getElementAtPosition?(
+			x: number,
+			y: number,
+			opts?: { preferSelected?: boolean; includeLockedElements?: boolean },
+		): ExcalidrawElementLike | null;
 		setViewport?(options: {
 			target: ExcalidrawElementLike;
 			fit: 'none';
@@ -579,7 +590,11 @@ export class ExcalidrawIntegration {
 			void this.openFormulaEditor(resolveCurrentViewFile(file, view.file), view, ea, element);
 		};
 		const onContextMenu = (event: MouseEvent): void => {
-			const element = ea.getViewSelectedElement?.();
+			const hitElement = this.getContextMenuHitElement(view, event);
+			const element = resolveContextMenuElement(
+				hitElement,
+				ea.getViewSelectedElement?.(),
+			);
 			const data = element ? readKnowledgeCanvasData(element) : null;
 			if (!data?.canvasType || !data.path) return;
 			event.preventDefault();
@@ -1186,6 +1201,29 @@ export class ExcalidrawIntegration {
 		} finally {
 			window.setTimeout(() => this.navigationLocks.delete(key), 200);
 		}
+	}
+
+	private getContextMenuHitElement(
+		view: ExcalidrawViewLike,
+		event: MouseEvent,
+	): ExcalidrawElementLike | null | undefined {
+		const api = view.excalidrawAPI;
+		if (!api?.getElementAtPosition) return undefined;
+		const state = api.getAppState();
+		const zoom = state.zoom?.value;
+		if (
+			!zoom
+			|| state.offsetLeft === undefined
+			|| state.offsetTop === undefined
+			|| state.scrollX === undefined
+			|| state.scrollY === undefined
+		) return undefined;
+		const x = (event.clientX - state.offsetLeft) / zoom - state.scrollX;
+		const y = (event.clientY - state.offsetTop) / zoom - state.scrollY;
+		return api.getElementAtPosition(x, y, {
+			preferSelected: false,
+			includeLockedElements: true,
+		});
 	}
 
 	private async activateFolderElement(

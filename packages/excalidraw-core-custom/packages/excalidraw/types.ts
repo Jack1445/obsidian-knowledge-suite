@@ -1337,6 +1337,8 @@ export interface ExcalidrawImperativeAPI {
   startLineEditor: InstanceType<typeof App>["startLineEditor"]; //zsviczian
   refreshAllArrows: InstanceType<typeof App>["refreshAllArrows"]; //zsviczian
   getSceneElements: InstanceType<typeof App>["getSceneElements"];
+  /** Returns the topmost scene element hit at the supplied scene coordinates. */
+  getElementAtPosition: InstanceType<typeof App>["getElementAtPosition"];
   getAppState: () => InstanceType<typeof App>["state"];
   getFiles: () => InstanceType<typeof App>["files"];
   getName: InstanceType<typeof App>["getName"];

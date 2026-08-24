@@ -36,6 +36,13 @@ This GitHub checkpoint freezes the version accepted in Obsidian before the conte
 - Redesigned the canvas manager around 2D and 3D canvas creation and removed the plain-canvas creation card.
 - Added recognizable 2D network and 3D globe nodes when managed canvases are dropped into a 2D canvas.
 
+## Stage 1 accepted checkpoint - 2026-08-24
+
+- Made canvas-node context menus use Excalidraw's precise pointer hit testing instead of the previously selected element.
+- Direct right-click now identifies the exact 2D or 3D canvas node under the pointer without requiring preselection.
+- Right-clicking blank canvas no longer reuses a stale managed-canvas selection.
+- Added compatibility fallback behavior for older Excalidraw builds that do not expose pointer hit testing.
+
 ## 0.1.0 - Unreleased
 
 ### Added

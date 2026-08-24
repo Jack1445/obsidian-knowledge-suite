@@ -6,6 +6,7 @@ import {
 	getKnowledgeCanvasFolderActivation,
 	parseKnowledgeCanvasLink,
 	readKnowledgeCanvasData,
+	resolveContextMenuElement,
 	resolveCurrentViewFile,
 } from '../src/integrations/knowledge-canvas-model';
 
@@ -68,6 +69,14 @@ describe('knowledge canvas metadata', () => {
 		const child = { path: 'Child.excalidraw.md' };
 		expect(resolveCurrentViewFile(parent, child)).toBe(child);
 		expect(resolveCurrentViewFile(parent, null)).toBe(parent);
+	});
+
+	it('uses the element under the context-menu pointer instead of a stale selection', () => {
+		const previouslySelected = { id: 'canvas-a' };
+		const pointerTarget = { id: 'canvas-b' };
+		expect(resolveContextMenuElement(pointerTarget, previouslySelected)).toBe(pointerTarget);
+		expect(resolveContextMenuElement(null, previouslySelected)).toBeNull();
+		expect(resolveContextMenuElement(undefined, previouslySelected)).toBe(previouslySelected);
 	});
 
 	it('finds the parent folder button that opened a child canvas', () => {

@@ -54,6 +54,18 @@ export function resolveCurrentViewFile<T>(boundFile: T, currentFile: T | null | 
 	return currentFile ?? boundFile;
 }
 
+/**
+ * Uses the pointer hit whenever precise Excalidraw hit testing is available.
+ * `null` deliberately means the pointer is on blank canvas; only `undefined`
+ * falls back to the legacy selected element for older Excalidraw builds.
+ */
+export function resolveContextMenuElement<T>(
+	hitElement: T | null | undefined,
+	selectedElement: T | null | undefined,
+): T | null {
+	return hitElement === undefined ? selectedElement ?? null : hitElement;
+}
+
 export function findKnowledgeCanvasFolderNode<T extends { customData?: unknown }>(
 	elements: readonly T[],
 	folderPath: string,
