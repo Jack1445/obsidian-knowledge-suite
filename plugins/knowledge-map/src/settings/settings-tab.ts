@@ -9,23 +9,23 @@ export class KnowledgeMapSettingTab extends PluginSettingTab {
 	getSettingDefinitions(): SettingDefinitionItem[] {
 		return [
 			{
-				name: 'Show linked notes outside the current folder',
-				desc: 'Adds dimmed nodes for resolved links whose target is not a direct child of the open folder.',
+				name: '显示当前文件夹外的链接笔记',
+				desc: '为已解析但不属于当前文件夹直接子项的链接目标显示淡化节点。',
 				control: { type: 'toggle', key: 'showExternalLinks', defaultValue: false },
 			},
 			{
-				name: 'Show node labels',
-				desc: 'Show note and folder names next to graph nodes.',
+				name: '显示节点标签',
+				desc: '在图谱节点旁显示笔记和文件夹名称。',
 				control: { type: 'toggle', key: 'showLabels', defaultValue: true },
 			},
 			{
-				name: 'Node size',
-				desc: 'Adjust the size of all graph nodes.',
+				name: '节点大小',
+				desc: '调整所有图谱节点的大小。',
 				control: { type: 'slider', key: 'nodeScale', min: 0.6, max: 1.8, step: 0.1, defaultValue: 1 },
 			},
 			{
-				name: 'Link thickness',
-				desc: 'Adjust the thickness of note-link lines.',
+				name: '连线粗细',
+				desc: '调整笔记链接线的粗细。',
 				control: { type: 'slider', key: 'linkScale', min: 0.5, max: 2, step: 0.1, defaultValue: 1 },
 			},
 		];
@@ -57,8 +57,8 @@ export class KnowledgeMapSettingTab extends PluginSettingTab {
 		this.containerEl.empty();
 
 		new Setting(this.containerEl)
-			.setName('Show linked notes outside the current folder')
-			.setDesc('Adds dimmed nodes for resolved links whose target is not a direct child of the open folder.')
+			.setName('显示当前文件夹外的链接笔记')
+			.setDesc('为已解析但不属于当前文件夹直接子项的链接目标显示淡化节点。')
 			.addToggle((toggle) => toggle
 				.setValue(this.plugin.store.settings.showExternalLinks)
 				.onChange(async (value) => {
@@ -67,8 +67,8 @@ export class KnowledgeMapSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(this.containerEl)
-			.setName('Show node labels')
-			.setDesc('Show note and folder names next to graph nodes.')
+			.setName('显示节点标签')
+			.setDesc('在图谱节点旁显示笔记和文件夹名称。')
 			.addToggle((toggle) => toggle
 				.setValue(this.plugin.store.settings.showLabels)
 				.onChange(async (value) => {
@@ -77,8 +77,8 @@ export class KnowledgeMapSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(this.containerEl)
-			.setName('Node size')
-			.setDesc('Adjust the size of all graph nodes.')
+			.setName('节点大小')
+			.setDesc('调整所有图谱节点的大小。')
 			.addSlider((slider) => slider
 				.setLimits(0.6, 1.8, 0.1)
 				.setValue(this.plugin.store.settings.nodeScale)
@@ -88,8 +88,8 @@ export class KnowledgeMapSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(this.containerEl)
-			.setName('Link thickness')
-			.setDesc('Adjust the thickness of note-link lines.')
+			.setName('连线粗细')
+			.setDesc('调整笔记链接线的粗细。')
 			.addSlider((slider) => slider
 				.setLimits(0.5, 2, 0.1)
 				.setValue(this.plugin.store.settings.linkScale)

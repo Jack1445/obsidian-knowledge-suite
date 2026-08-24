@@ -12,6 +12,7 @@
 import {
   CaptureUpdateAction,
   findInlineFormulaSourceRange,
+  getInlineFormulaEditableText,
   hasRenderableInlineFormulaSource,
   refreshTextDimensions,
   type InlineFormulaSourceRange,
@@ -56,7 +57,7 @@ export const actionInsertInlineFormula = register<InlineFormulaActionData>({
     }
 
     const originalText = data
-      ? editingElement.rawText ?? editingElement.originalText
+      ? getInlineFormulaEditableText(editingElement)
       : editor!.value; // zsviczian -- retain text after the modal unmounts the native editor
     const selectionStart = data?.range.start ?? editor!.selectionStart;
     const selectionEnd = data?.range.end ?? editor!.selectionEnd;

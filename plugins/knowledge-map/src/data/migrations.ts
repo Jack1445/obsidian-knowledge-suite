@@ -13,8 +13,14 @@ export function migrateData(raw: unknown): KnowledgeMapData {
 		knowledgeCanvases: Object.fromEntries(
 			Object.entries(candidate.knowledgeCanvases ?? {}).map(([filePath, state]) => [
 				filePath,
-				{ ...state, layouts: state.layouts ?? {} },
+				{
+					...state,
+					canvasType: state.canvasType === '3d' ? '3d' : '2d',
+					layouts: state.layouts ?? {},
+				},
 			]),
 		),
+		canvasReferences: candidate.canvasReferences ?? {},
+		canvasOrder: candidate.canvasOrder ?? {},
 	};
 }

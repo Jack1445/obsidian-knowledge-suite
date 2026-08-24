@@ -34,7 +34,7 @@ export class KnowledgeMapView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Knowledge map';
+		return '2维画布';
 	}
 
 	getIcon(): string {
@@ -72,7 +72,7 @@ export class KnowledgeMapView extends ItemView {
 	openFolder(path: string, addToHistory = true): void {
 		const normalized = normalizeFolderPath(path);
 		if (normalized !== ROOT_PATH && !this.app.vault.getFolderByPath(normalized)) {
-			new Notice('That folder no longer exists. Returning to the vault root.');
+			new Notice('该文件夹已不存在，已返回仓库根目录。');
 			this.currentPath = ROOT_PATH;
 		} else {
 			this.currentPath = normalized;
@@ -84,32 +84,29 @@ export class KnowledgeMapView extends ItemView {
 	private buildToolbar(): void {
 		this.toolbarEl = this.contentEl.createDiv({ cls: 'knowledge-map__toolbar' });
 		const historyGroup = this.toolbarEl.createDiv({ cls: 'knowledge-map__toolbar-group' });
-		this.backButton = this.iconButton(historyGroup, 'arrow-left', 'Go back', () => {
+		this.backButton = this.iconButton(historyGroup, 'arrow-left', '后退', () => {
 			const path = this.history.back();
 			if (path) this.openFolder(path, false);
 		});
-		this.forwardButton = this.iconButton(historyGroup, 'arrow-right', 'Go forward', () => {
+		this.forwardButton = this.iconButton(historyGroup, 'arrow-right', '前进', () => {
 			const path = this.history.forward();
 			if (path) this.openFolder(path, false);
 		});
-		this.iconButton(historyGroup, 'home', 'Open vault root', () => this.openFolder(ROOT_PATH));
+		this.iconButton(historyGroup, 'home', '打开仓库根目录', () => this.openFolder(ROOT_PATH));
 		this.breadcrumbEl = this.toolbarEl.createDiv({ cls: 'knowledge-map__breadcrumbs' });
 
 		const actions = this.toolbarEl.createDiv({ cls: 'knowledge-map__toolbar-group is-actions' });
-		this.labeledButton(actions, 'globe-2', 'Open globe for this folder', 'Globe', () => {
-			void this.plugin.activateGlobe(this.currentPath);
-		});
-		this.labeledButton(actions, 'layout-dashboard', 'Manage canvases', 'Canvases', () => this.openCanvasMenu());
-		this.sliderControl(actions, 'Node size', 0.6, 1.8, 0.1, this.plugin.store.settings.nodeScale, (value) => {
+		this.labeledButton(actions, 'layout-dashboard', '管理画布', '画布', () => this.openCanvasMenu());
+		this.sliderControl(actions, '节点大小', 0.6, 1.8, 0.1, this.plugin.store.settings.nodeScale, (value) => {
 			this.plugin.store.setSettings({ nodeScale: value });
 			this.renderer?.setNodeScale(value);
 		});
-		this.sliderControl(actions, 'Link thickness', 0.5, 2, 0.1, this.plugin.store.settings.linkScale, (value) => {
+		this.sliderControl(actions, '连线粗细', 0.5, 2, 0.1, this.plugin.store.settings.linkScale, (value) => {
 			this.plugin.store.setSettings({ linkScale: value });
 			this.renderer?.setLinkScale(value);
 		});
-		this.iconButton(actions, 'scan', 'Reset viewport', () => this.renderer?.resetViewport());
-		this.iconButton(actions, 'rotate-ccw', 'Reset this folder layout', () => {
+		this.iconButton(actions, 'scan', '重置视角', () => this.renderer?.resetViewport());
+		this.iconButton(actions, 'rotate-ccw', '重置当前文件夹布局', () => {
 			this.plugin.store.resetMap(this.currentPath);
 			this.renderMap();
 		});
@@ -121,6 +118,7 @@ export class KnowledgeMapView extends ItemView {
 			this.currentPath,
 			this.lastGraph,
 			this.lastPositions,
+			undefined,
 		).open();
 	}
 
@@ -190,7 +188,7 @@ export class KnowledgeMapView extends ItemView {
 		if (!graph.nodes.some((node) => node.kind === 'folder' || node.kind === 'note' || node.kind === 'external-note')) {
 			this.graphEl.createDiv({
 				cls: 'knowledge-map__empty',
-				text: 'This folder has no child folders or Markdown notes yet.',
+				text: '当前文件夹中还没有子文件夹或 Markdown 笔记。',
 			});
 		}
 
@@ -213,8 +211,8 @@ export class KnowledgeMapView extends ItemView {
 		const kinds = new Set(graph.edges.map((edge) => edge.kind));
 		if (kinds.size === 0) return;
 		const legend = this.graphEl.createDiv({ cls: 'knowledge-map__legend' });
-		if (kinds.has('containment')) this.legendItem(legend, 'containment', 'Folder hierarchy');
-		if (kinds.has('link')) this.legendItem(legend, 'link', 'Note reference');
+		if (kinds.has('containment')) this.legendItem(legend, 'containment', '文件夹层级');
+		if (kinds.has('link')) this.legendItem(legend, 'link', '笔记引用');
 	}
 
 	private legendItem(parent: HTMLElement, kind: 'containment' | 'link', label: string): void {
@@ -231,7 +229,7 @@ export class KnowledgeMapView extends ItemView {
 
 	private renderBreadcrumbs(): void {
 		this.breadcrumbEl.empty();
-		const rootButton = this.breadcrumbEl.createEl('button', { text: 'Vault' });
+		const rootButton = this.breadcrumbEl.createEl('button', { text: '仓库' });
 		rootButton.addEventListener('click', () => this.openFolder(ROOT_PATH));
 		if (this.currentPath === ROOT_PATH) return;
 		let path = '';

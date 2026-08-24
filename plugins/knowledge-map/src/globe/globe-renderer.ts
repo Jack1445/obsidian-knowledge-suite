@@ -21,6 +21,8 @@ interface LabelEntry {
 export class GlobeRenderer {
 	private disposed = false;
 	private stopAnimation: (() => void) | null = null;
+	private pointerToPosition: ((clientX: number, clientY: number) => GlobePosition | null) | null = null;
+	private focusNodeHandler: ((nodeId: string) => boolean) | null = null;
 
 	constructor(private readonly options: GlobeRendererOptions) {}
 
@@ -100,10 +102,24 @@ export class GlobeRenderer {
 		controls.zoomSpeed = 0.8;
 		controls.minDistance = 3.2;
 		controls.maxDistance = 14;
+		this.pointerToPosition = (clientX, clientY) => {
+			return this.raycastGlobe(clientX, clientY, camera, globe, renderer, THREE);
+		};
 
 		const labels = this.options.graph.nodes
 			.filter((node) => node.kind !== 'current-folder')
 			.map((node, index) => this.createLabel(node, index, labelsEl, controls, camera, globe, renderer, THREE));
+		this.focusNodeHandler = (nodeId) => {
+			const label = labels.find((entry) => entry.node.id === nodeId);
+			if (!label) return false;
+			const distance = camera.position.length();
+			const raw = latLngToVec3(label.position.lat, label.position.lng, distance);
+			camera.position.set(raw.x, raw.y, raw.z);
+			camera.lookAt(0, 0, 0);
+			controls.target.set(0, 0, 0);
+			controls.update();
+			return true;
+		};
 		const resize = () => {
 			const width = Math.max(1, this.options.container.clientWidth);
 			const height = Math.max(1, this.options.container.clientHeight);
@@ -127,6 +143,8 @@ export class GlobeRenderer {
 		animate();
 
 		this.stopAnimation = () => {
+			this.pointerToPosition = null;
+			this.focusNodeHandler = null;
 			window.cancelAnimationFrame(animationFrame);
 			resizeObserver.disconnect();
 			controls.dispose();
@@ -152,6 +170,14 @@ export class GlobeRenderer {
 		this.disposed = true;
 		this.stopAnimation?.();
 		this.stopAnimation = null;
+	}
+
+	positionAt(clientX: number, clientY: number): GlobePosition | null {
+		return this.pointerToPosition?.(clientX, clientY) ?? null;
+	}
+
+	focusNode(nodeId: string): boolean {
+		return this.focusNodeHandler?.(nodeId) ?? false;
 	}
 
 	private createStars(THREE: typeof import('three')): import('three').Points {
@@ -185,10 +211,15 @@ export class GlobeRenderer {
 		THREE: typeof import('three'),
 	): LabelEntry {
 		const position = this.options.positions[node.id] ?? defaultLatLng(node.id, index);
+		const kindLabel = node.kind === 'folder'
+			? '文件夹'
+			: node.kind === 'current-folder'
+				? '当前文件夹'
+				: node.kind === 'external-note' ? '外部笔记' : '笔记';
 		const element = parent.createEl('button', {
 			cls: `knowledge-map-globe__label is-${node.kind}`,
 			text: node.label,
-			attr: { 'aria-label': `${node.label}, ${node.kind}` },
+			attr: { 'aria-label': `${node.label}，${kindLabel}` },
 		});
 		element.addEventListener('pointerdown', (event) => {
 			event.preventDefault();

@@ -1,11 +1,23 @@
-import { Notice, Plugin, type WorkspaceLeaf } from 'obsidian';
+import { Notice, Plugin, TFile, type WorkspaceLeaf } from 'obsidian';
 import { KnowledgeMapStore } from './data/store';
 import { ExcalidrawIntegration } from './integrations/excalidraw';
 import { KnowledgeMapSettingTab } from './settings/settings-tab';
 import { KNOWLEDGE_MAP_GLOBE_VIEW_TYPE, GlobeView } from './views/globe-view';
 import { KNOWLEDGE_MAP_VIEW_TYPE, KnowledgeMapView } from './views/knowledge-map-view';
+import {
+	CanvasTreeView,
+	KNOWLEDGE_CANVAS_TREE_VIEW_TYPE,
+} from './views/canvas-tree-view';
 import { CanvasManagerModal } from './ui/canvas-manager-modal';
 import { KnowledgeFormulaDialog, renderLatexToSvg } from './ui/formula-dialog';
+import { folderDisplayName, normalizeFolderPath } from './core/paths';
+import {
+	createEmptyGlobeCanvasDocument,
+	GLOBE_CANVAS_FILE_EXTENSION,
+	serializeGlobeCanvasDocument,
+} from './globe/globe-canvas-document';
+
+const EXCALIDRAW_VIEW_TYPE = 'excalidraw';
 
 export default class KnowledgeMapPlugin extends Plugin {
 	store!: KnowledgeMapStore;
@@ -18,60 +30,51 @@ export default class KnowledgeMapPlugin extends Plugin {
 
 		this.registerView(KNOWLEDGE_MAP_VIEW_TYPE, (leaf) => new KnowledgeMapView(leaf, this));
 		this.registerView(KNOWLEDGE_MAP_GLOBE_VIEW_TYPE, (leaf) => new GlobeView(leaf, this));
-		this.addRibbonIcon('network', 'Open 2d knowledge map', () => void this.activateView());
-		this.addRibbonIcon('globe-2', 'Open knowledge globe', () => void this.activateGlobe('/'));
-		this.addRibbonIcon('layout-dashboard', 'Manage knowledge canvases', () => {
-			new CanvasManagerModal(this, '/', null, null).open();
+		this.registerExtensions([GLOBE_CANVAS_FILE_EXTENSION], KNOWLEDGE_MAP_GLOBE_VIEW_TYPE);
+		this.registerView(KNOWLEDGE_CANVAS_TREE_VIEW_TYPE, (leaf) => new CanvasTreeView(leaf, this));
+		this.addRibbonIcon('layout-dashboard', '管理画布', () => {
+			this.openActiveCanvasManager();
 		});
-		this.addCommand({
-			id: 'open-map',
-			name: 'Open 2d map',
-			callback: () => void this.activateView(),
-		});
+		this.addRibbonIcon('folder-tree', '打开画布树', () => void this.activateCanvasTree());
 		this.addCommand({
 			id: 'create-knowledge-canvas',
-			name: 'Create knowledge canvas',
+			name: '创建结构画布',
 			callback: () => void this.excalidraw.createKnowledgeCanvas('/'),
 		});
 		this.addCommand({
-			id: 'new-blank-canvas',
-			name: 'Create plain Excalidraw canvas',
-			callback: () => void this.excalidraw.createBlank('/'),
-		});
-		this.addCommand({
 			id: 'refresh-knowledge-canvas',
-			name: 'Refresh active knowledge canvas',
+			name: '刷新当前画布',
 			callback: () => void this.excalidraw.refreshActiveKnowledgeCanvas(),
 		});
 		this.addCommand({
 			id: 'knowledge-canvas-back',
-			name: 'Go back in active knowledge canvas',
+			name: '返回当前画布的上一层',
 			callback: () => void this.excalidraw.goBackActiveKnowledgeCanvas(),
 		});
 		this.addCommand({
 			id: 'reset-knowledge-canvas-layout',
-			name: 'Restore default layout in active knowledge canvas',
+			name: '恢复当前画布的默认布局',
 			callback: () => void this.excalidraw.resetActiveKnowledgeCanvasLayout(),
 		});
 		this.addCommand({
 			id: 'insert-or-edit-knowledge-canvas-formula',
-			name: 'Insert or edit formula in active knowledge canvas',
+			name: '在当前画布中插入或编辑公式',
 			callback: () => void this.excalidraw.editFormulaInActiveKnowledgeCanvas(),
 		});
 		this.addCommand({
 			id: 'toggle-knowledge-canvas-text-bold',
-			name: 'Toggle bold for selected text in active knowledge canvas',
+			name: '切换当前画布所选文字的粗体',
 			callback: () => void this.excalidraw.toggleBoldInActiveKnowledgeCanvas(),
 		});
 		this.addCommand({
-			id: 'open-globe',
-			name: 'Open knowledge globe',
-			callback: () => void this.activateGlobe('/'),
+			id: 'manage-canvases',
+			name: '管理画布',
+			callback: () => this.openActiveCanvasManager(),
 		});
 		this.addCommand({
-			id: 'manage-canvases',
-			name: 'Manage knowledge canvases',
-			callback: () => new CanvasManagerModal(this, '/', null, null).open(),
+			id: 'open-canvas-tree',
+			name: '打开画布树',
+			callback: () => void this.activateCanvasTree(),
 		});
 		this.addSettingTab(new KnowledgeMapSettingTab(this.app, this));
 
@@ -81,8 +84,90 @@ export default class KnowledgeMapPlugin extends Plugin {
 		});
 	}
 
-	async activateGlobe(folderPath: string): Promise<void> {
-		await this.activateGlobeView(folderPath);
+	openCanvasManager(folderPath: string, parentCanvasPath?: string): void {
+		new CanvasManagerModal(this, folderPath, null, null, parentCanvasPath).open();
+	}
+
+	async createGlobeCanvas(folderPath: string, parentCanvasPath?: string): Promise<string | null> {
+		const normalized = normalizeFolderPath(folderPath);
+		const timestamp = new Date().toISOString().replaceAll(':', '-').replace('T', ' ').slice(0, 19);
+		const baseName = `${folderDisplayName(normalized)} 3维画布 ${timestamp}`;
+		let index = 1;
+		let filePath = this.globeCanvasPath(normalized, baseName);
+		while (this.app.vault.getAbstractFileByPath(filePath)) {
+			index += 1;
+			filePath = this.globeCanvasPath(normalized, `${baseName} ${index}`);
+		}
+		try {
+			const file = await this.app.vault.create(
+				filePath,
+				serializeGlobeCanvasDocument(createEmptyGlobeCanvasDocument()),
+			);
+			this.store.registerKnowledgeCanvas(file.path, normalized, parentCanvasPath, '3d');
+			await this.store.flush();
+			await this.openManagedCanvasFile(file.path, true, parentCanvasPath ?? '');
+			new Notice(parentCanvasPath ? '子3维画布已创建。' : '3维画布已创建。');
+			return file.path;
+		} catch {
+			new Notice('无法创建3维画布文件。');
+			return null;
+		}
+	}
+
+	async openOrCreateChildGlobeCanvas(parentCanvasPath: string, folderPath: string): Promise<void> {
+		const existingPath = this.store.findChildKnowledgeCanvas(parentCanvasPath, folderPath, '3d');
+		if (existingPath) {
+			const existingFile = this.app.vault.getAbstractFileByPath(existingPath);
+			if (existingFile instanceof TFile) {
+				await this.openManagedCanvasFile(existingFile.path, true, parentCanvasPath);
+				return;
+			}
+			this.store.removeKnowledgeCanvas(existingPath);
+		}
+		await this.createGlobeCanvas(folderPath, parentCanvasPath);
+	}
+
+	async openManagedCanvasFile(
+		filePath: string,
+		openInNewLeaf = false,
+		sourcePath = '',
+	): Promise<boolean> {
+		const state = this.store.getKnowledgeCanvas(filePath);
+		const viewType = state?.canvasType === '3d' ? KNOWLEDGE_MAP_GLOBE_VIEW_TYPE : EXCALIDRAW_VIEW_TYPE;
+		const existing = this.app.workspace.getLeavesOfType(viewType).find((leaf) => {
+			return (leaf.view as unknown as { file?: TFile | null }).file?.path === filePath;
+		});
+		if (existing) {
+			await this.app.workspace.revealLeaf(existing);
+			this.app.workspace.setActiveLeaf(existing, { focus: true });
+			return true;
+		}
+		await this.app.workspace.openLinkText(filePath, sourcePath, openInNewLeaf);
+		return false;
+	}
+
+	async openParentCanvas(childCanvasPath: string): Promise<void> {
+		const childState = this.store.getKnowledgeCanvas(childCanvasPath);
+		const parentPath = childState?.parentCanvasPath;
+		if (!parentPath) {
+			new Notice('当前已经是顶层画布。');
+			return;
+		}
+		const parentFile = this.app.vault.getAbstractFileByPath(parentPath);
+		if (!(parentFile instanceof TFile)) {
+			new Notice('找不到父画布。');
+			return;
+		}
+		const alreadyOpen = await this.openManagedCanvasFile(parentFile.path, false, childCanvasPath);
+		if (alreadyOpen) return;
+		if (this.store.getKnowledgeCanvas(parentFile.path)?.canvasType === '2d') {
+			await this.excalidraw.centerKnowledgeCanvasFolderNode(
+				parentFile.path,
+				childState.history[0] ?? childState.folderPath,
+			);
+		} else {
+			await this.centerGlobeCanvasNode(parentFile.path, childState.folderPath);
+		}
 	}
 
 	async editInlineFormula(initialLatex = ''): Promise<{
@@ -144,7 +229,21 @@ export default class KnowledgeMapPlugin extends Plugin {
 		await this.app.workspace.revealLeaf(leaf);
 		this.app.workspace.setActiveLeaf(leaf, { focus: true });
 		if (leaf.view instanceof KnowledgeMapView) leaf.view.openFolder(folderPath);
-		else new Notice('Could not open knowledge map.');
+		else new Notice('无法打开2维画布。');
+	}
+
+	async activateCanvasTree(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(KNOWLEDGE_CANVAS_TREE_VIEW_TYPE)[0];
+		const leaf = existing ?? this.app.workspace.getLeftLeaf(false);
+		if (!leaf) {
+			new Notice('无法打开画布树。');
+			return;
+		}
+		if (!existing) {
+			await leaf.setViewState({ type: KNOWLEDGE_CANVAS_TREE_VIEW_TYPE, active: true });
+		}
+		await this.app.workspace.revealLeaf(leaf);
+		this.app.workspace.setActiveLeaf(leaf, { focus: true });
 	}
 
 	onunload(): void {
@@ -160,6 +259,12 @@ export default class KnowledgeMapPlugin extends Plugin {
 	private registerVaultEvents(): void {
 		this.registerEvent(this.app.workspace.on('active-leaf-change', (leaf) => {
 			window.setTimeout(() => this.excalidraw.bindLeaf(leaf), 100);
+			for (const treeLeaf of this.app.workspace.getLeavesOfType(KNOWLEDGE_CANVAS_TREE_VIEW_TYPE)) {
+				if (treeLeaf.view instanceof CanvasTreeView) treeLeaf.view.refresh();
+			}
+		}));
+		this.registerEvent(this.app.workspace.on('file-open', () => {
+			window.setTimeout(() => this.excalidraw.bindOpenViews(), 100);
 		}));
 		this.registerEvent(this.app.vault.on('create', () => this.refreshViews()));
 		this.registerEvent(this.app.vault.on('modify', () => this.refreshViews()));
@@ -177,18 +282,24 @@ export default class KnowledgeMapPlugin extends Plugin {
 		this.registerEvent(this.app.metadataCache.on('resolved', () => this.refreshViews()));
 	}
 
-	private async activateGlobeView(folderPath: string): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(KNOWLEDGE_MAP_GLOBE_VIEW_TYPE)[0];
-		let leaf: WorkspaceLeaf;
-		if (existing) {
-			leaf = existing;
-		} else {
-			leaf = this.app.workspace.getLeaf('tab');
-			await leaf.setViewState({ type: KNOWLEDGE_MAP_GLOBE_VIEW_TYPE, active: true });
+	private openActiveCanvasManager(): void {
+		// The global manager creates top-level canvases. Child canvases are created
+		// only from an explicit canvas action (folder node or "创建子画布").
+		this.openCanvasManager('/');
+	}
+
+	private async centerGlobeCanvasNode(canvasPath: string, nodePath: string): Promise<void> {
+		for (let attempt = 0; attempt < 30; attempt += 1) {
+			const leaf = this.app.workspace.getLeavesOfType(KNOWLEDGE_MAP_GLOBE_VIEW_TYPE).find((candidate) => {
+				return (candidate.view as unknown as { file?: TFile | null }).file?.path === canvasPath;
+			});
+			if (leaf?.view instanceof GlobeView && leaf.view.focusPath(nodePath)) return;
+			await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
 		}
-		await this.app.workspace.revealLeaf(leaf);
-		this.app.workspace.setActiveLeaf(leaf, { focus: true });
-		if (leaf.view instanceof GlobeView) leaf.view.openFolder(folderPath);
-		else new Notice('Could not open knowledge globe.');
+	}
+
+	private globeCanvasPath(folderPath: string, fileName: string): string {
+		const name = `${fileName}.${GLOBE_CANVAS_FILE_EXTENSION}`;
+		return folderPath === '/' ? name : `${folderPath}/${name}`;
 	}
 }

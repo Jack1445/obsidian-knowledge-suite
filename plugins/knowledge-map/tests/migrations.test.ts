@@ -14,7 +14,28 @@ describe('plugin data migrations', () => {
 			},
 		});
 
-		expect(migrated.schemaVersion).toBe(3);
+		expect(migrated.schemaVersion).toBe(7);
 		expect(migrated.knowledgeCanvases['Canvas.excalidraw.md']?.layouts).toEqual({});
+		expect(migrated.knowledgeCanvases['Canvas.excalidraw.md']?.canvasType).toBe('2d');
+		expect(migrated.canvasReferences).toEqual({});
+		expect(migrated.canvasOrder).toEqual({});
+	});
+
+	it('preserves persisted parent canvas relationships', () => {
+		const migrated = migrateData({
+			schemaVersion: 3,
+			knowledgeCanvases: {
+				'Child.excalidraw.md': {
+					folderPath: 'Projects/Child',
+					history: ['Projects/Child'],
+					historyIndex: 0,
+					layouts: {},
+					parentCanvasPath: 'Parent.excalidraw.md',
+				},
+			},
+		});
+
+		expect(migrated.knowledgeCanvases['Child.excalidraw.md']?.parentCanvasPath)
+			.toBe('Parent.excalidraw.md');
 	});
 });

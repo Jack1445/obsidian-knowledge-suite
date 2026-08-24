@@ -21,11 +21,13 @@ import {
   getInlineBoldRanges,
   getInlineFormulaRenderSize,
   getInlineTextLineWidth,
+  getInlineTextRunCaretOffset,
   getInlineTextRuns,
   elementWithCanvasCache,
   inlineBoldRangesEqual,
   isInlineOffsetBold,
   rebaseInlineBoldRanges,
+  shouldRenderInlineTextEditorTextRun,
   toggleInlineBoldRange,
   withInlineBoldRanges,
   INLINE_BOLD_TOGGLE_EVENT,
@@ -255,6 +257,13 @@ export const textWysiwyg = ({
   );
   let previousEditableValue = element.originalText;
   let activeInlineBold: boolean | null = null;
+  let inlineTextHitTargets: Array<{
+    element: HTMLElement;
+    sourceStart: number;
+    sourceEnd: number;
+    getCaretPosition: (clientX: number, rect: DOMRect) => number;
+  }> = [];
+  let inlineSelectionDrag: { pointerId: number; anchor: number } | null = null;
 
   const updateInlineTextOverlay = (
     updatedTextElement: ExcalidrawTextElement,
@@ -263,6 +272,7 @@ export const textWysiwyg = ({
       return;
     }
     formulaLayer.replaceChildren();
+    inlineTextHitTargets = [];
     inlineBoldRanges = getInlineBoldRanges(
       updatedTextElement,
       editable.value.length,
@@ -273,6 +283,21 @@ export const textWysiwyg = ({
       0,
       updatedTextElement,
     ).some((run) => run.type === "formula");
+    // The textarea must retain the raw formula source for selection and
+    // submission, but painting that source would place its suffix at the raw
+    // LaTeX width. The overlay below paints the complete visual line instead.
+    const editorTextColor = applyDarkModeFilter(
+      updatedTextElement.strokeColor,
+      app.state.theme === THEME.DARK,
+    );
+    editable.style.color = hasFormula
+      ? "transparent"
+      : editorTextColor;
+    editable.style.caretColor = hasFormula ? "transparent" : editorTextColor;
+    editable.classList.toggle(
+      "excalidraw-wysiwyg--inline-formula",
+      hasFormula,
+    );
     if (
       (!hasBold && !hasFormula) ||
       updatedTextElement.containerId ||
@@ -314,31 +339,78 @@ export const textWysiwyg = ({
       font,
       updatedTextElement.autoResize ? Infinity : updatedTextElement.width,
     );
+    const visualSelectionStart = Math.min(
+      editable.selectionStart,
+      editable.selectionEnd,
+    );
+    const visualSelectionEnd = Math.max(
+      editable.selectionStart,
+      editable.selectionEnd,
+    );
 
+    let visualCaretRendered = false;
     lines.forEach(({ text: line, start: lineSourceOffset }, lineIndex) => {
       const runs = getInlineTextRuns(
         line,
         lineSourceOffset,
         updatedTextElement,
       );
-      if (!runs.some((run) => run.type === "formula" || run.bold)) {
+      if (
+        !hasFormula &&
+        !runs.some((run) => run.type === "formula" || run.bold)
+      ) {
         return;
       }
-      const sourceLineWidth = getInlineTextLineWidth(runs, updatedTextElement);
+      const visualLineWidth = getInlineTextLineWidth(runs, updatedTextElement);
       let cursorX =
         updatedTextElement.textAlign === "center"
-          ? (updatedTextElement.width - sourceLineWidth) / 2
+          ? (updatedTextElement.width - visualLineWidth) / 2
           : updatedTextElement.textAlign === "right"
-          ? updatedTextElement.width - sourceLineWidth
+          ? updatedTextElement.width - visualLineWidth
           : 0;
 
       runs.forEach((run) => {
         if (run.type === "text") {
           const runWidth = getLineWidth(run.text, run.bold ? boldFont : font);
-          if (run.bold) {
-            const bold = document.createElement("span");
-            bold.textContent = run.text;
-            Object.assign(bold.style, {
+          if (shouldRenderInlineTextEditorTextRun(run, hasFormula)) {
+            const selectedStart = Math.max(
+              visualSelectionStart,
+              run.sourceStart,
+            );
+            const selectedEnd = Math.min(
+              visualSelectionEnd,
+              run.sourceEnd,
+            );
+            if (hasFormula && selectedStart < selectedEnd) {
+              const selectedPrefixWidth = getLineWidth(
+                run.text.slice(0, selectedStart - run.sourceStart),
+                run.bold ? boldFont : font,
+              );
+              const selectedWidth = getLineWidth(
+                run.text.slice(
+                  selectedStart - run.sourceStart,
+                  selectedEnd - run.sourceStart,
+                ),
+                run.bold ? boldFont : font,
+              );
+              const selection = document.createElement("span");
+              Object.assign(selection.style, {
+                position: "absolute",
+                display: "block",
+                left: `${cursorX + selectedPrefixWidth}px`,
+                top: `${lineIndex * lineHeightPx}px`,
+                width: `${Math.max(1, selectedWidth)}px`,
+                height: `${lineHeightPx}px`,
+                borderRadius: "2px",
+                background: "Highlight",
+                opacity: "0.35",
+                pointerEvents: "none",
+              });
+              formulaLayer!.appendChild(selection);
+            }
+            const text = document.createElement("span");
+            text.textContent = run.text;
+            Object.assign(text.style, {
               position: "absolute",
               display: "block",
               left: `${cursorX}px`,
@@ -353,19 +425,76 @@ export const textWysiwyg = ({
                 updatedTextElement.strokeColor,
                 app.state.theme === THEME.DARK,
               ),
-              font: boldFont,
-              fontWeight: "700",
+              font: run.bold ? boldFont : font,
+              fontWeight: run.bold ? "700" : "400",
               lineHeight: `${lineHeightPx}px`,
               whiteSpace: "pre",
               opacity: `${updatedTextElement.opacity / 100}`,
+              pointerEvents: hasFormula ? "auto" : "none",
+              cursor: hasFormula ? "text" : "default",
+            });
+            if (hasFormula) {
+              text.onpointerdown = beginInlineSelectionDrag;
+              inlineTextHitTargets.push({
+                element: text,
+                sourceStart: run.sourceStart,
+                sourceEnd: run.sourceEnd,
+                getCaretPosition: (clientX, rect) => {
+                  const targetX =
+                    rect.width > 0
+                      ? ((clientX - rect.left) / rect.width) * runWidth
+                      : 0;
+                  return (
+                    run.sourceStart +
+                    getInlineTextRunCaretOffset(
+                      run.text,
+                      Math.max(0, Math.min(runWidth, targetX)),
+                      updatedTextElement,
+                      run.bold,
+                    )
+                  );
+                },
+              });
+            }
+            formulaLayer!.appendChild(text);
+          }
+          if (
+            hasFormula &&
+            !visualCaretRendered &&
+            editable.selectionStart === editable.selectionEnd &&
+            editable.selectionStart >= run.sourceStart &&
+            editable.selectionStart <= run.sourceEnd
+          ) {
+            const caretOffset = Math.max(
+              0,
+              Math.min(
+                run.text.length,
+                editable.selectionStart - run.sourceStart,
+              ),
+            );
+            const caret = document.createElement("span");
+            Object.assign(caret.style, {
+              position: "absolute",
+              display: "block",
+              left: `${
+                cursorX +
+                getLineWidth(
+                  run.text.slice(0, caretOffset),
+                  run.bold ? boldFont : font,
+                )
+              }px`,
+              top: `${lineIndex * lineHeightPx}px`,
+              width: "1px",
+              height: `${lineHeightPx}px`,
+              background: editorTextColor,
               pointerEvents: "none",
             });
-            formulaLayer!.appendChild(bold);
+            formulaLayer!.appendChild(caret);
+            visualCaretRendered = true;
           }
           cursorX += runWidth;
           return;
         }
-        const sourceWidth = Math.max(1, getLineWidth(run.source, font));
         const size = getInlineFormulaRenderSize(
           run.record,
           updatedTextElement.fontSize,
@@ -383,9 +512,14 @@ export const textWysiwyg = ({
           justifyContent: "flex-start",
           left: `${cursorX}px`,
           top: `${lineIndex * lineHeightPx}px`,
-          width: `${Math.max(sourceWidth, size.width)}px`,
+          width: `${size.width}px`,
           height: `${lineHeightPx}px`,
           background: canvasBackground,
+          boxShadow:
+            visualSelectionStart < run.sourceEnd &&
+            visualSelectionEnd > run.sourceStart
+              ? "inset 0 0 0 2px Highlight"
+              : "none",
           pointerEvents: "auto",
           cursor: "text",
           overflow: "visible",
@@ -420,9 +554,150 @@ export const textWysiwyg = ({
         };
         formula.appendChild(image);
         formulaLayer!.appendChild(formula);
+        inlineTextHitTargets.push({
+          element: formula,
+          sourceStart: run.sourceStart,
+          sourceEnd: run.sourceEnd,
+          getCaretPosition: (clientX, rect) =>
+            clientX < rect.left + rect.width / 2
+              ? run.sourceStart
+              : run.sourceEnd,
+        });
+        if (
+          hasFormula &&
+          !visualCaretRendered &&
+          editable.selectionStart === editable.selectionEnd &&
+          editable.selectionStart >= run.sourceStart &&
+          editable.selectionStart <= run.sourceEnd
+        ) {
+          const caret = document.createElement("span");
+          const formulaMidpoint = (run.sourceStart + run.sourceEnd) / 2;
+          Object.assign(caret.style, {
+            position: "absolute",
+            display: "block",
+            left: `${
+              cursorX +
+              (editable.selectionStart < formulaMidpoint ? 0 : size.width)
+            }px`,
+            top: `${lineIndex * lineHeightPx}px`,
+            width: "1px",
+            height: `${lineHeightPx}px`,
+            background: editorTextColor,
+            pointerEvents: "none",
+          });
+          formulaLayer!.appendChild(caret);
+          visualCaretRendered = true;
+        }
         cursorX += size.width;
       });
     });
+  };
+
+  const getInlineCaretPositionFromPoint = (
+    clientX: number,
+    clientY: number,
+  ): number | null => {
+    let closest:
+      | { target: (typeof inlineTextHitTargets)[number]; rect: DOMRect }
+      | null = null;
+    let closestDistance = Infinity;
+
+    for (const target of inlineTextHitTargets) {
+      if (!target.element.isConnected) {
+        continue;
+      }
+      const rect = target.element.getBoundingClientRect();
+      const distanceX =
+        clientX < rect.left
+          ? rect.left - clientX
+          : clientX > rect.right
+          ? clientX - rect.right
+          : 0;
+      const distanceY =
+        clientY < rect.top
+          ? rect.top - clientY
+          : clientY > rect.bottom
+          ? clientY - rect.bottom
+          : 0;
+      const distance = distanceX * distanceX + distanceY * distanceY;
+      if (distance < closestDistance) {
+        closest = { target, rect };
+        closestDistance = distance;
+      }
+    }
+
+    return closest
+      ? closest.target.getCaretPosition(clientX, closest.rect)
+      : null;
+  };
+
+  const refreshInlineSelectionOverlay = () => {
+    const liveElement = app.scene.getElement<
+      NonDeleted<ExcalidrawTextElement>
+    >(element.id);
+    liveElement && updateInlineTextOverlay(liveElement);
+  };
+
+  const setInlineSelection = (anchor: number, focus: number) => {
+    editable.setSelectionRange(
+      Math.min(anchor, focus),
+      Math.max(anchor, focus),
+      focus < anchor ? "backward" : "forward",
+    );
+  };
+
+  const beginInlineSelectionDrag = (event: PointerEvent) => {
+    if (event.button !== POINTER_BUTTON.MAIN) {
+      return;
+    }
+    const caretPosition = getInlineCaretPositionFromPoint(
+      event.clientX,
+      event.clientY,
+    );
+    if (caretPosition === null) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const selectionAnchor = event.shiftKey
+      ? editable.selectionDirection === "backward"
+        ? editable.selectionEnd
+        : editable.selectionStart
+      : caretPosition;
+    inlineSelectionDrag = {
+      pointerId: event.pointerId,
+      anchor: selectionAnchor,
+    };
+    editable.focus();
+    setInlineSelection(selectionAnchor, caretPosition);
+    refreshInlineSelectionOverlay();
+  };
+
+  const onInlineSelectionPointerMove = (event: PointerEvent) => {
+    if (!inlineSelectionDrag || event.pointerId !== inlineSelectionDrag.pointerId) {
+      return;
+    }
+    const caretPosition = getInlineCaretPositionFromPoint(
+      event.clientX,
+      event.clientY,
+    );
+    if (caretPosition === null) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setInlineSelection(inlineSelectionDrag.anchor, caretPosition);
+    refreshInlineSelectionOverlay();
+  };
+
+  const finishInlineSelectionDrag = (event: PointerEvent) => {
+    if (!inlineSelectionDrag || event.pointerId !== inlineSelectionDrag.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    inlineSelectionDrag = null;
+    refreshInlineSelectionOverlay();
   };
 
   const textPropertiesUpdated = (
@@ -735,6 +1010,25 @@ export const textWysiwyg = ({
 
   const onInlineBoldToggle = () => toggleInlineBoldSelection();
   editable.addEventListener(INLINE_BOLD_TOGGLE_EVENT, onInlineBoldToggle);
+  const onInlineTextSelectionChange = () => {
+    if (
+      inlineSelectionDrag ||
+      editable.ownerDocument.activeElement !== editable
+    ) {
+      return;
+    }
+    const updatedTextElement = app.scene.getElement<
+      NonDeleted<ExcalidrawTextElement>
+    >(element.id);
+    updatedTextElement && updateInlineTextOverlay(updatedTextElement);
+  };
+  editable.ownerDocument.addEventListener(
+    "selectionchange",
+    onInlineTextSelectionChange,
+  );
+  window.addEventListener("pointermove", onInlineSelectionPointerMove, true);
+  window.addEventListener("pointerup", finishInlineSelectionDrag, true);
+  window.addEventListener("pointercancel", finishInlineSelectionDrag, true);
   const onInlineBoldShortcut = (event: KeyboardEvent) => {
     if (
       event.target === editable &&
@@ -1157,6 +1451,13 @@ export const textWysiwyg = ({
     editable.oninput = null;
     editable.onkeydown = null;
     editable.removeEventListener(INLINE_BOLD_TOGGLE_EVENT, onInlineBoldToggle);
+    editable.ownerDocument.removeEventListener(
+      "selectionchange",
+      onInlineTextSelectionChange,
+    );
+    window.removeEventListener("pointermove", onInlineSelectionPointerMove, true);
+    window.removeEventListener("pointerup", finishInlineSelectionDrag, true);
+    window.removeEventListener("pointercancel", finishInlineSelectionDrag, true);
     window.removeEventListener("keydown", onInlineBoldShortcut, true);
 
     if (observer) {

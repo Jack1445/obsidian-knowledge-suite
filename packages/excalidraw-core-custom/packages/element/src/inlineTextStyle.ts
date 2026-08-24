@@ -349,6 +349,51 @@ export const getInlineTextLineWidth = (
   }, 0);
 };
 
+/**
+ * Formula source can be much wider than its rendered preview. The native
+ * textarea is sized to the rendered element and clips overflowing glyphs, so
+ * regular text after a formula must also be painted by the overflow-visible
+ * editor layer. Without a formula, only bold runs need an overlay.
+ */
+export const shouldRenderInlineTextEditorTextRun = (
+  run: Extract<InlineTextRun, { type: "text" }>,
+  hasFormula: boolean,
+): boolean => hasFormula || run.bold;
+
+/**
+ * Maps a horizontal point inside a visually rendered text run to its UTF-16
+ * source offset. Formula-aware editors use this to place the native textarea
+ * caret in the suffix even when a compact formula makes the textarea's own
+ * hit testing disagree with the visible layout.
+ */
+export const getInlineTextRunCaretOffset = (
+  text: string,
+  targetX: number,
+  element: Pick<ExcalidrawTextElement, "fontFamily" | "fontSize">,
+  bold = false,
+): number => {
+  const font = bold ? getInlineBoldFontString(element) : getFontString(element);
+  const offsets = [0];
+  let sourceOffset = 0;
+
+  for (const char of Array.from(text)) {
+    sourceOffset += char.length;
+    offsets.push(sourceOffset);
+  }
+
+  let closestOffset = 0;
+  let closestDistance = Math.abs(targetX);
+  for (const offset of offsets.slice(1)) {
+    const distance = Math.abs(getLineWidth(text.slice(0, offset), font) - targetX);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestOffset = offset;
+    }
+  }
+
+  return closestOffset;
+};
+
 export const hasInlineTextFormatting = (
   element: Pick<ExcalidrawTextElement, "customData">,
 ) =>

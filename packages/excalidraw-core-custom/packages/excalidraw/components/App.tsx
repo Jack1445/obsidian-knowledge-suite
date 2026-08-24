@@ -262,6 +262,7 @@ import {
   isEligibleFrameChildType,
   getBindingStrategyForDraggingBindingElementEndpoints,
   findInlineFormulaAtScenePoint,
+  getInlineFormulaEditableText,
   hasRenderableInlineFormulaSource,
   isNonDeletedElement,
   subscribeToInlineFormulaImageLoad, // zsviczian -- redraw after persisted formula SVGs load
@@ -6799,7 +6800,10 @@ class App extends React.Component<AppProps, AppState> {
 
     //zsviczian
     if (this.props.onBeforeTextEdit) {
-      const text = this.props.onBeforeTextEdit(element, isExistingElement);
+      const text = getInlineFormulaEditableText(
+        element,
+        this.props.onBeforeTextEdit(element, isExistingElement),
+      );
       if (text && text !== element.originalText) {
         this.scene.replaceAllElements([
           ...this.scene.getElementsIncludingDeleted().map((_element) => {

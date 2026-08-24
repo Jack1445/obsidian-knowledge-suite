@@ -14,7 +14,7 @@ export function parentFolderPath(path: string): string | null {
 
 export function folderDisplayName(path: string): string {
 	const normalized = normalizeFolderPath(path);
-	if (normalized === ROOT_PATH) return 'Vault';
+	if (normalized === ROOT_PATH) return '仓库';
 	return normalized.slice(normalized.lastIndexOf('/') + 1);
 }
 

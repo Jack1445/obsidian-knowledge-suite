@@ -3,7 +3,7 @@
   "name": "Knowledge Map",
   "version": "0.1.0",
   "minAppVersion": "1.7.2",
-  "description": "Navigate folders and linked notes in a persistent visual map.",
+  "description": "以持久化的可视化画布浏览文件夹与关联笔记。",
   "author": "Jack1445",
   "authorUrl": "https://github.com/Jack1445",
   "isDesktopOnly": false

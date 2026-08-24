@@ -18,7 +18,9 @@ Instead, `src/integrations/excalidraw.ts` uses the installed plugin's public `wi
 - add a scoped whole-text bold control without changing Excalidraw's element schema;
 - leave text, icons, shapes, free drawing, export, themes, and other canvas behavior to Excalidraw itself.
 
-Generated elements carry `customData.knowledgeMap` metadata. `scope: "map"` identifies the replaceable current-folder layer, while `scope: "manual"` identifies nodes the user explicitly dropped onto the canvas. Knowledge-canvas registration and folder history live in Knowledge Map's own plugin data; existing Excalidraw files that were not created as knowledge canvases remain untouched.
+Generated elements carry `customData.knowledgeMap` metadata. `scope: "map"` identifies the refreshable folder layer, while `scope: "manual"` identifies nodes the user explicitly dropped onto the canvas. Every folder node opens a separate child Knowledge Canvas so its destination graph never contaminates the source drawing. Parent paths and canvas registration live in Knowledge Map's own plugin data; Back returns to the exact parent and no Root navigation element is generated. Existing Excalidraw files that were not created as knowledge canvases remain untouched.
+
+The Canvas tree is a dedicated Obsidian `ItemView`. It builds a virtual hierarchy from the same parent paths, so nesting is independent of the vault's physical folder structure. Store subscriptions refresh open tree views when relationships change; missing-parent and cyclic records remain visible as top-level entries instead of disappearing.
 
 Knowledge Map listens for short, unmoved pointer clicks in registered knowledge-canvas views, so clicking a managed circle or label activates it directly from its custom data. A pointer gesture that moves more than the click threshold remains an ordinary Excalidraw drag. Managed elements do not carry Excalidraw links, avoiding redundant link-indicator icons; older managed elements have those links removed when their knowledge canvas binds.
 

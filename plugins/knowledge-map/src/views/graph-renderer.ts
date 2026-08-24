@@ -59,7 +59,7 @@ export class GraphRenderer {
 		this.viewport = { ...options.viewport };
 		this.svg.addClass('knowledge-map__svg');
 		this.svg.setAttribute('role', 'application');
-		this.svg.setAttribute('aria-label', `Knowledge map for ${options.graph.folderPath}`);
+		this.svg.setAttribute('aria-label', `${options.graph.folderPath} 的2维画布`);
 		this.world.append(this.edgeLayer, this.nodeLayer);
 		this.svg.append(this.world);
 		options.container.append(this.svg);
@@ -103,7 +103,7 @@ export class GraphRenderer {
 			path.setAttribute('d', createEdgePath(edge, from, to));
 			path.style.setProperty('--knowledge-map-link-scale', `${this.options.linkScale}`);
 			const title = svgElement('title');
-			title.textContent = edge.kind === 'containment' ? 'Folder hierarchy' : 'Note reference';
+			title.textContent = edge.kind === 'containment' ? '文件夹层级' : '笔记引用';
 			path.append(title);
 			this.edgeLayer.append(path);
 			this.edgeElements.set(edge.id, path);
@@ -121,7 +121,12 @@ export class GraphRenderer {
 		group.setAttribute('transform', `translate(${position.x} ${position.y})`);
 		group.setAttribute('tabindex', '0');
 		group.setAttribute('role', 'button');
-		group.setAttribute('aria-label', `${node.label}, ${node.kind}`);
+		const kindLabel = node.kind === 'folder'
+			? '文件夹'
+			: node.kind === 'current-folder'
+				? '当前文件夹'
+				: node.kind === 'external-note' ? '外部笔记' : '笔记';
+		group.setAttribute('aria-label', `${node.label}，${kindLabel}`);
 		group.style.setProperty('--knowledge-map-node-scale', `${this.options.nodeScale}`);
 		const title = svgElement('title');
 		title.textContent = node.label;

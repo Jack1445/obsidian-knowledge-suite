@@ -1,6 +1,8 @@
-import { Modal, Setting, TFile } from 'obsidian';
+import { Modal, setIcon, TFile } from 'obsidian';
 import type KnowledgeMapPlugin from '../main';
 import type { FolderGraph, SavedNodePosition } from '../core/graph';
+import { canvasDisplayName } from '../services/canvas-tree';
+import type { KnowledgeCanvasType } from '../data/schema';
 
 export class CanvasManagerModal extends Modal {
 	constructor(
@@ -8,68 +10,105 @@ export class CanvasManagerModal extends Modal {
 		private readonly folderPath: string,
 		private readonly graph: FolderGraph | null,
 		private readonly positions: Record<string, SavedNodePosition> | null,
+		private readonly parentCanvasPath?: string,
 	) {
 		super(plugin.app);
 	}
 
 	onOpen(): void {
-		this.titleEl.setText('Knowledge canvases');
+		this.modalEl.addClass('knowledge-map-canvas-manager-modal');
+		this.titleEl.setText('管理画布');
 		this.contentEl.createEl('p', {
-			cls: 'setting-item-description',
-			text: 'Create a live knowledge canvas with the complete Excalidraw toolset, a plain drawing, or open the 3d globe.',
+			cls: 'knowledge-map-canvas-manager__intro',
+			text: '创建独立的 2维或3维画布；新画布会保存为文件，并接入画布树。',
 		});
 
-		new Setting(this.contentEl)
-			.setName('Knowledge canvas')
-			.setDesc('Start with this folder map inside Excalidraw. Drill into folders and drag more vault files or folders onto the drawing.')
-			.addButton((button) => button.setButtonText('Create').setCta().onClick(() => {
-				this.close();
-				void this.plugin.excalidraw.createKnowledgeCanvas(this.folderPath);
-			}));
+		const actions = this.contentEl.createDiv({ cls: 'knowledge-map-canvas-manager__actions' });
+		this.addAction(
+			actions,
+			'network',
+			'2维画布',
+			'以当前文件夹生成可继续展开子画布的二维知识结构。',
+			'新建',
+			true,
+			() => void this.plugin.excalidraw.createKnowledgeCanvas(this.folderPath, this.parentCanvasPath),
+		);
+		this.addAction(
+			actions,
+			'globe-2',
+			'3维画布',
+			'新建一张空白地球画布，可从文件列表拖入文件或文件夹。',
+			'新建',
+			false,
+			() => void this.plugin.createGlobeCanvas(this.folderPath, this.parentCanvasPath),
+		);
 
-		new Setting(this.contentEl)
-			.setName('Plain Excalidraw canvas')
-			.setDesc('Create an empty Excalidraw drawing without automatic knowledge map nodes.')
-			.addButton((button) => button.setButtonText('Create').onClick(() => {
-				this.close();
-				void this.plugin.excalidraw.createBlank(this.folderPath);
-			}));
-
-		new Setting(this.contentEl)
-			.setName('Globe canvas')
-			.setDesc("Place this folder's nodes on an interactive globe. Drag a label to save its geographic position.")
-			.addButton((button) => button.setButtonText('Open').onClick(() => {
-				this.close();
-				void this.plugin.activateGlobe(this.folderPath);
-			}));
-
-		this.contentEl.createEl('h3', { text: 'Existing Excalidraw canvases' });
-		const drawings = this.app.vault.getFiles()
-			.filter((file) => this.plugin.excalidraw.isDrawing(file))
-			.sort((left, right) => right.stat.mtime - left.stat.mtime);
+		const drawings = this.plugin.store.getKnowledgeCanvasEntries()
+			.flatMap(([filePath, state]): { file: TFile; canvasType: KnowledgeCanvasType }[] => {
+				const file = this.app.vault.getAbstractFileByPath(filePath);
+				return file instanceof TFile ? [{ file, canvasType: state.canvasType }] : [];
+			})
+			.sort((left, right) => right.file.stat.mtime - left.file.stat.mtime);
+		const section = this.contentEl.createDiv({ cls: 'knowledge-map-canvas-manager__section' });
+		const heading = section.createDiv({ cls: 'knowledge-map-canvas-manager__section-heading' });
+		heading.createEl('h3', { text: '已有画布' });
+		heading.createSpan({ text: `${drawings.length} 张` });
 		if (drawings.length === 0) {
-			this.contentEl.createEl('p', {
-				cls: 'setting-item-description',
-				text: 'No Excalidraw canvases were found in this vault.',
+			section.createDiv({
+				cls: 'knowledge-map-canvas-manager__empty',
+				text: '当前仓库中还没有画布。',
 			});
 			return;
 		}
-		const list = this.contentEl.createDiv({ cls: 'knowledge-map-canvas-list' });
-		for (const file of drawings) this.addDrawing(list, file);
+		const list = section.createDiv({ cls: 'knowledge-map-canvas-list' });
+		for (const drawing of drawings) this.addDrawing(list, drawing.file, drawing.canvasType);
 	}
 
 	onClose(): void {
 		this.contentEl.empty();
 	}
 
-	private addDrawing(parent: HTMLElement, file: TFile): void {
-		const button = parent.createEl('button', { cls: 'knowledge-map-canvas-list__item' });
-		const prefix = this.plugin.excalidraw.isKnowledgeCanvas(file) ? 'Knowledge · ' : '';
-		button.createSpan({ cls: 'knowledge-map-canvas-list__name', text: `${prefix}${file.basename}` });
-		button.createSpan({ cls: 'knowledge-map-canvas-list__path', text: file.parent?.path ?? '/' });
+	private addAction(
+		parent: HTMLElement,
+		iconName: string,
+		title: string,
+		description: string,
+		actionLabel: string,
+		primary: boolean,
+		onClick: () => void,
+	): void {
+		const button = parent.createEl('button', {
+			cls: `knowledge-map-canvas-manager__action${primary ? ' is-primary' : ''}`,
+		});
+		const icon = button.createSpan({ cls: 'knowledge-map-canvas-manager__action-icon' });
+		setIcon(icon, iconName);
+		const body = button.createSpan({ cls: 'knowledge-map-canvas-manager__action-body' });
+		body.createSpan({ cls: 'knowledge-map-canvas-manager__action-title', text: title });
+		body.createSpan({ cls: 'knowledge-map-canvas-manager__action-desc', text: description });
+		button.createSpan({ cls: 'knowledge-map-canvas-manager__action-label', text: actionLabel });
 		button.addEventListener('click', () => {
 			this.close();
-			void this.app.workspace.openLinkText(file.path, this.folderPath, false);
+			onClick();
+		});
+	}
+
+	private addDrawing(parent: HTMLElement, file: TFile, canvasType: KnowledgeCanvasType): void {
+		const button = parent.createEl('button', { cls: 'knowledge-map-canvas-list__item' });
+		const icon = button.createSpan({ cls: 'knowledge-map-canvas-list__icon' });
+		setIcon(icon, canvasType === '3d' ? 'globe-2' : 'network');
+		const body = button.createSpan({ cls: 'knowledge-map-canvas-list__body' });
+		body.createSpan({ cls: 'knowledge-map-canvas-list__name', text: canvasDisplayName(file.path) });
+		body.createSpan({
+			cls: 'knowledge-map-canvas-list__path',
+			text: file.parent?.path === '/' ? '仓库根目录' : file.parent?.path ?? '仓库根目录',
+		});
+		button.createSpan({
+			cls: 'knowledge-map-canvas-list__badge',
+			text: canvasType === '3d' ? '3维画布' : '2维画布',
+		});
+		button.addEventListener('click', () => {
+			this.close();
+			void this.plugin.openManagedCanvasFile(file.path, false, this.folderPath);
 		});
 	}
 }

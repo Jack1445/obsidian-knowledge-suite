@@ -167,6 +167,40 @@ export const hasRenderableInlineFormulaSource = (
   );
 };
 
+/**
+ * Resolves the source that should be restored when native text editing starts.
+ *
+ * Obsidian keeps a separate raw-text cache. Older inline-formula insertions can
+ * leave both that cache and `rawText` truncated at the end of the formula while
+ * `originalText` still contains the suffix rendered on canvas. Prefer the most
+ * complete candidate that still contains a formula backed by persisted render
+ * data, while retaining the host-provided source for normal text elements.
+ */
+export const getInlineFormulaEditableText = (
+  element: Pick<ExcalidrawTextElement, "customData"> &
+    Partial<Pick<ExcalidrawTextElement, "originalText" | "rawText">>,
+  hostText?: string | null,
+): string => {
+  const fallback = hostText ?? element.rawText ?? element.originalText ?? "";
+  const candidates = [fallback, element.rawText, element.originalText].filter(
+    (candidate): candidate is string => typeof candidate === "string",
+  );
+  let resolved = fallback;
+  let resolvedHasFormula = hasRenderableInlineFormulaSource(element, resolved);
+
+  for (const candidate of candidates) {
+    if (!hasRenderableInlineFormulaSource(element, candidate)) {
+      continue;
+    }
+    if (!resolvedHasFormula || candidate.length > resolved.length) {
+      resolved = candidate;
+      resolvedHasFormula = true;
+    }
+  }
+
+  return resolved;
+};
+
 export const getInlineFormulaRenderSize = (
   record: InlineFormulaRecord,
   fontSize: number,

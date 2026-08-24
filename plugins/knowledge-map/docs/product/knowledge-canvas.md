@@ -15,12 +15,18 @@ Knowledge Map does not copy or modify the Excalidraw plugin. Excalidraw must be 
 
 Choose **Plain Excalidraw canvas** when no automatic knowledge nodes are wanted.
 
+## Browse the canvas tree
+
+Choose **Open canvas tree** from the ribbon or command palette to open a dedicated left-sidebar hierarchy. A canvas with children has a disclosure arrow and can be expanded through any number of descendant levels. Clicking a canvas name opens it and expands its direct children; Ctrl/Cmd-click opens it in a new leaf. The current canvas is highlighted.
+
+The tree uses persisted parent-canvas relationships rather than physical folders. Canvas files therefore stay where they were created, while newly created, renamed, deleted, or re-parented canvases refresh the sidebar automatically.
+
 ## Understand the elements
 
-- Orange circles are folders. Click one to replace the generated layer with that folder's map.
+- Orange circles are folders. Click one to create or reopen that folder's child canvas.
 - Blue circles are Markdown notes. Click one to open the real note.
-- **Back** returns to the previous folder visited in this canvas.
-- **Root** returns to the vault root.
+- **Back** returns a child canvas to the parent canvas that opened it.
+- Top-level canvases have no navigation chip. Child canvases show **Back** only; there is no **Root** chip.
 - **Reset knowledge layout** in Excalidraw's three-dot tool menu restores the current folder's generated nodes and connections to their orderly default positions. It is a menu option, so it does not move or scale with the drawing.
 - Gently curved warm solid arrows show folder containment; gently curved blue dashed lines show note references.
 
@@ -36,9 +42,9 @@ Use every normal Excalidraw tool as usual. You can also drag a Markdown file or 
 - a folder becomes a drillable folder node;
 - multiple dropped items are arranged in a small grid at the drop position.
 
-Manually dropped nodes and ordinary Excalidraw elements are not removed when you drill into another folder or refresh the generated layer.
+Clicking either a generated or manually dropped folder opens an independent child Knowledge Canvas containing that folder's generated map, so the source drawing remains unchanged. The parent/child relationship is stored in plugin data. Clicking the same folder again from the same parent reopens the existing child instead of creating a duplicate, and **Back** focuses or reopens the exact parent canvas.
 
-Generated node positions are saved separately for every folder in every knowledge canvas. Moving nodes, drilling elsewhere, returning, refreshing, or reopening the drawing restores that canvas's saved layout instead of reverting to the automatic row.
+Generated node positions are saved separately for every knowledge canvas. Moving nodes, entering a child, returning, refreshing, or reopening the drawing restores that canvas's saved layout instead of reverting to the automatic row.
 
 Curved Excalidraw connections contain a bend point as well as two bound endpoints. If repeated manual dragging makes a bend untidy, use **Reset knowledge layout** in the three-dot tool menu to rebuild the current generated layer; manually added canvas content remains in place.
 
@@ -64,9 +70,10 @@ The editor interface and KaTeX parser are ported from Knowledge-main. Symbol but
 - **Knowledge Map: Insert or edit formula in active knowledge canvas**
 - **Knowledge Map: Toggle bold for selected text in active knowledge canvas**
 - **Knowledge Map: Create plain Excalidraw canvas**
+- **Knowledge Map: Open canvas tree**
 
 ## Storage and safety
 
-The drawing remains an ordinary `.excalidraw.md` file. Knowledge Map stores only its current folder and navigation history in plugin data. It marks generated elements with Excalidraw custom data so refresh and drill-down can distinguish them from the user's own drawing elements.
+The drawing remains an ordinary `.excalidraw.md` file. Knowledge Map stores its folder, layout, and optional parent-canvas path in plugin data. It marks generated elements with Excalidraw custom data so refresh can distinguish them from the user's own drawing elements.
 
 The extra menu and text-style options are injected only while a registered knowledge canvas is open. Ordinary Excalidraw drawings are not changed, and the Excalidraw plugin's files are never modified.

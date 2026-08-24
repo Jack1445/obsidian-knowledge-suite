@@ -1,6 +1,8 @@
 import type { FolderMapState, SavedNodePosition } from '../core/graph';
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 7;
+
+export type KnowledgeCanvasType = '2d' | '3d';
 
 export interface GlobePosition {
 	lat: number;
@@ -8,10 +10,12 @@ export interface GlobePosition {
 }
 
 export interface KnowledgeCanvasState {
+	canvasType: KnowledgeCanvasType;
 	folderPath: string;
 	history: string[];
 	historyIndex: number;
 	layouts: Record<string, Record<string, SavedNodePosition>>;
+	parentCanvasPath?: string;
 }
 
 export interface KnowledgeMapSettings {
@@ -27,6 +31,8 @@ export interface KnowledgeMapData {
 	mapStates: Record<string, FolderMapState>;
 	globePositions: Record<string, Record<string, GlobePosition>>;
 	knowledgeCanvases: Record<string, KnowledgeCanvasState>;
+	canvasReferences: Record<string, string[]>;
+	canvasOrder: Record<string, string[]>;
 }
 
 export const DEFAULT_SETTINGS: KnowledgeMapSettings = {
@@ -43,5 +49,7 @@ export function createDefaultData(): KnowledgeMapData {
 		mapStates: {},
 		globePositions: {},
 		knowledgeCanvases: {},
+		canvasReferences: {},
+		canvasOrder: {},
 	};
 }

@@ -22,6 +22,7 @@ I build this plugin as a labor of love. Curious about the philosophy behind it? 
 - Inline LaTeX formulas can be inserted into standalone native text without changing existing fonts, sizes, colors, alignment, or shape-bound text behavior.
 
 ## Fixed
+- Editing text with an inline formula in the middle no longer hides, displaces, or misroutes clicks, drag selections, and edits intended for the following text.
 - Markdown-image edits could be lost in some usage scenarios, 2.26.3 did not provide a broad enough fix. [#2865](${URLs.GITHUB_COM_ZSVICZIAN_OBSIDIAN_EXCALIDRAW_PLUGIN_ISSUES}/2865)
 
 `,

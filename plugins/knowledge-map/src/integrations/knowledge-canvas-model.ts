@@ -1,4 +1,5 @@
 import type { MapEdge, MapNodeKind } from '../core/graph';
+import type { KnowledgeCanvasType } from '../data/schema';
 
 export const KNOWLEDGE_CANVAS_LINK_PREFIX = 'knowledge-map://';
 export const KNOWLEDGE_CANVAS_DATA_KEY = 'knowledgeMap';
@@ -12,6 +13,7 @@ export interface KnowledgeCanvasElementData {
 	scope: KnowledgeCanvasElementScope;
 	role: KnowledgeCanvasElementRole;
 	action?: KnowledgeCanvasAction;
+	canvasType?: KnowledgeCanvasType;
 	edgeKind?: MapEdge['kind'];
 	latex?: string;
 	nodeKind?: MapNodeKind;
@@ -21,6 +23,47 @@ export interface KnowledgeCanvasElementData {
 export interface KnowledgeCanvasLink {
 	action: KnowledgeCanvasAction;
 	path?: string;
+}
+
+export type KnowledgeCanvasFolderActivation = 'open-child-canvas';
+
+/**
+ * Folder navigation always crosses a persisted parent/child canvas edge.
+ * Keeping every folder map in its own drawing prevents generated layers from
+ * replacing either managed or manually added content in the source canvas.
+ */
+export function getKnowledgeCanvasFolderActivation(
+	_data: Pick<KnowledgeCanvasElementData, 'scope'>,
+): KnowledgeCanvasFolderActivation {
+	return 'open-child-canvas';
+}
+
+export function canNavigateBackFromKnowledgeCanvas(state: {
+	historyIndex: number;
+	parentCanvasPath?: string;
+}): boolean {
+	return state.historyIndex > 0 || Boolean(state.parentCanvasPath);
+}
+
+/**
+ * Excalidraw can reuse one view instance when a tab opens another drawing.
+ * Event handlers therefore have to prefer the file currently attached to the
+ * view instead of the file that happened to be open when they were registered.
+ */
+export function resolveCurrentViewFile<T>(boundFile: T, currentFile: T | null | undefined): T {
+	return currentFile ?? boundFile;
+}
+
+export function findKnowledgeCanvasFolderNode<T extends { customData?: unknown }>(
+	elements: readonly T[],
+	folderPath: string,
+): T | null {
+	return elements.find((element) => {
+		const data = readKnowledgeCanvasData(element);
+		return data?.role === 'node'
+			&& data.nodeKind === 'folder'
+			&& data.path === folderPath;
+	}) ?? null;
 }
 
 export function createKnowledgeCanvasLink(action: KnowledgeCanvasAction, path?: string): string {

@@ -11,7 +11,7 @@ describe('folder paths', () => {
 		expect(parentFolderPath('/')).toBeNull();
 		expect(parentFolderPath('Projects')).toBe('/');
 		expect(parentFolderPath('Projects/Maps')).toBe('Projects');
-		expect(folderDisplayName('/')).toBe('Vault');
+		expect(folderDisplayName('/')).toBe('仓库');
 		expect(folderDisplayName('Projects/Maps')).toBe('Maps');
 	});
 

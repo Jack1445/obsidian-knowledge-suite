@@ -2,11 +2,47 @@
 
 All notable changes to Knowledge Map are documented here. Each tested GitHub checkpoint includes a short user-facing summary.
 
+## Stage 0 accepted baseline - 2026-08-24
+
+This GitHub checkpoint freezes the version accepted in Obsidian before the context-menu redesign begins.
+
+### Excalidraw text editing
+
+- Fixed inline formulas hiding or displacing the text that follows them when native text editing starts.
+- Kept suffix text editable, deletable, mouse-selectable, and compatible with partial bold formatting.
+- Restored complete formula source text when older raw-text caches contain a truncated value.
+
+### Canvas files and navigation
+
+- Added independent persistent files for both 2D and 3D canvases.
+- Added persistent parent/child canvas relationships without moving canvas files on disk.
+- Kept references independent from structural parent/child relationships.
+- Made child-canvas Back navigation return to the exact parent canvas, preserving an already-open parent's viewport and centering the entry node only when the parent must be reopened.
+- Treated dropped folders as independent child-canvas entry points instead of replacing the source canvas content.
+- Added file and folder drops to 3D canvases, with persisted globe positions.
+
+### Canvas tree
+
+- Added an infinitely nestable Canvas tree for 2D and 3D canvases.
+- Added collapsible reference folders with outgoing, incoming, and reciprocal direction indicators.
+- Added right-click file operations and direct canvas opening from the tree.
+- Added same-level drag sorting for roots and siblings, with independent persisted order for every parent canvas.
+- Kept reference folders fixed after structural children and excluded them from manual sorting.
+
+### Interface
+
+- Localized Knowledge Map commands and management surfaces into Chinese while retaining the plugin name **Knowledge Map**.
+- Simplified the left sidebar to **Manage canvases** and **Open Canvas tree**.
+- Redesigned the canvas manager around 2D and 3D canvas creation and removed the plain-canvas creation card.
+- Added recognizable 2D network and 3D globe nodes when managed canvases are dropped into a 2D canvas.
+
 ## 0.1.0 - Unreleased
 
 ### Added
 
 - Initial Obsidian plugin project and documentation.
+- Added a left-sidebar **Canvas tree** that presents persisted parent/child canvases as an infinitely nestable hierarchy without moving their files.
+- Restyled **Canvas tree** with compact rows, canvas icons, active highlighting, child counts, and rounded hierarchy connector curves.
 - Folder-aware 2D knowledge map.
 - Folder drill-down, breadcrumbs, and navigation history.
 - Persistent node coordinates and viewport per folder.
@@ -17,7 +53,7 @@ All notable changes to Knowledge Map are documented here. Each tested GitHub che
 - Added in-canvas node-size and link-thickness controls.
 - Added canvas management for blank and graph-seeded native Excalidraw drawings.
 - Added a lazy-loaded 3D globe with local Earth/cloud textures and persistent geographic node positions.
-- Added live Excalidraw knowledge canvases with default folder maps, same-canvas folder drill-down, navigation history, refresh commands, and vault file/folder drop support.
+- Added live Excalidraw knowledge canvases with default folder maps, persistent parent/child canvas navigation, refresh commands, and vault file/folder drop support.
 - Preserved user-created Excalidraw text, icons, shapes, and drawings when the generated folder layer is refreshed or drilled into.
 - Added direct click activation for knowledge nodes while preserving normal Excalidraw drag gestures.
 - Expanded Obsidian file-explorer drop detection so Markdown files and folders become the same editable circular knowledge nodes.
@@ -32,6 +68,8 @@ All notable changes to Knowledge Map are documented here. Each tested GitHub che
 
 - Kept existing LaTeX source visible when reopening a formula for editing.
 - Restored **Insert/Edit formula** and **Reset knowledge layout** after reloading the plugin without restarting Obsidian.
+- Manually dropped folders now open an independent folder Knowledge Canvas instead of expanding into and polluting the source drawing and its back-navigation state.
+- Folder navigation now creates or reopens persistent child canvases. Child canvases show only **Back**, which returns to their parent canvas; the obsolete **Root** chip is no longer generated.
 
 ### Changed — folder hierarchy and canvas entry points
 

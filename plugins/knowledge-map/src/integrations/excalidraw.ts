@@ -1,5 +1,6 @@
 import {
 	App,
+	Menu,
 	Notice,
 	setIcon,
 	TAbstractFile,
@@ -13,11 +14,16 @@ import { folderDisplayName, normalizeFolderPath } from '../core/paths';
 import type { KnowledgeMapStore } from '../data/store';
 import { VaultGraphBuilder } from '../obsidian/vault-graph-builder';
 import { createInitialPositions } from '../services/initial-layout';
+import { canvasDisplayName } from '../services/canvas-tree';
 import { KnowledgeFormulaDialog, renderLatexToSvgDataUrl } from '../ui/formula-dialog';
 import {
 	KNOWLEDGE_CANVAS_DATA_KEY,
+	canNavigateBackFromKnowledgeCanvas,
+	findKnowledgeCanvasFolderNode,
+	getKnowledgeCanvasFolderActivation,
 	parseKnowledgeCanvasLink,
 	readKnowledgeCanvasData,
+	resolveCurrentViewFile,
 	type KnowledgeCanvasAction,
 	type KnowledgeCanvasElementData,
 } from './knowledge-canvas-model';
@@ -76,6 +82,12 @@ interface ExcalidrawViewLike {
 		getAppState(): {
 			editingTextElement?: ExcalidrawElementLike | null;
 		};
+		setViewport?(options: {
+			target: ExcalidrawElementLike;
+			fit: 'none';
+			animation?: boolean | { duration?: number };
+			offsets?: { ui?: true };
+		}): void;
 	};
 	getViewType(): string;
 }
@@ -267,36 +279,40 @@ export class ExcalidrawIntegration {
 		if (!ea) return;
 		ea.reset();
 		await ea.create({
-			filename: drawingName('Blank canvas'),
+			filename: drawingName('空白画布'),
 			foldername: folderPath === ROOT_PATH ? undefined : folderPath,
 			onNewPane: true,
-			plaintext: 'A standard Excalidraw drawing created from Knowledge Map.',
+			plaintext: '由2维画布插件创建的普通 Excalidraw 画布。',
 		});
 	}
 
-	async createKnowledgeCanvas(folderPath: string): Promise<void> {
+	async createKnowledgeCanvas(
+		folderPath: string,
+		parentCanvasPath?: string,
+	): Promise<string | null> {
 		const ea = this.requireApi();
-		if (!ea) return;
+		if (!ea) return null;
 		const normalizedPath = normalizeFolderPath(folderPath);
 		const graph = this.graphBuilder.build(normalizedPath, this.store.settings.showExternalLinks);
 		const positions = createInitialPositions(graph, this.store.getMapState(normalizedPath)?.nodes ?? {});
 
 		ea.reset();
-		this.addFolderMapToWorkbench(ea, graph, positions);
+		this.addFolderMapToWorkbench(ea, graph, positions, Boolean(parentCanvasPath));
 		const filePath = await ea.create({
-			filename: drawingName(`${folderDisplayName(normalizedPath)} knowledge canvas`),
+			filename: drawingName(`${folderDisplayName(normalizedPath)} 2维画布`),
 			foldername: normalizedPath === ROOT_PATH ? undefined : normalizedPath,
 			onNewPane: true,
 			plaintext: [
-				'Created by Knowledge Map.',
-				'Folder nodes can drill down without leaving this Excalidraw canvas.',
-				'Your own Excalidraw elements are preserved when the folder map changes.',
+				'由2维画布插件创建。',
+				'文件夹节点会打开持久化的子画布。',
+				'文件夹结构变化时会保留你自己添加的 Excalidraw 元素。',
 			].join(' '),
 		});
-		this.store.registerKnowledgeCanvas(filePath, normalizedPath);
+		this.store.registerKnowledgeCanvas(filePath, normalizedPath, parentCanvasPath);
 		await this.store.flush();
 		await this.bindCreatedCanvas(filePath);
-		new Notice('Knowledge canvas created. Use Excalidraw link interaction on a folder node to drill down.');
+		new Notice(parentCanvasPath ? '子画布已创建。' : '2维画布已创建。');
+		return filePath;
 	}
 
 	async createFromGraph(
@@ -323,20 +339,38 @@ export class ExcalidrawIntegration {
 		if (!ea) return false;
 		ea.setView?.(view);
 		ea.onLinkClickHook = (element, linkText, event, hookView, hookEa) => {
+			const currentFile = resolveCurrentViewFile(file, hookView.file);
+			if (!this.store.getKnowledgeCanvas(currentFile.path)) return true;
 			const target = parseKnowledgeCanvasLink(linkText);
 			if (target) {
-				void this.activateKnowledgeTarget(file, hookView, hookEa, target, false);
+				const data = readKnowledgeCanvasData(element);
+				if (target.action === 'folder' && target.path && data) {
+					void this.activateFolderElement(
+						currentFile,
+						hookView,
+						hookEa,
+						data,
+						event.ctrlKey || event.metaKey,
+					);
+				} else {
+					void this.activateKnowledgeTarget(currentFile, hookView, hookEa, target, false);
+				}
 				return false;
 			}
 			const data = readKnowledgeCanvasData(element);
+			if (data?.canvasType && data.path) {
+				void this.openManagedCanvasFile(currentFile, data.path, event.ctrlKey || event.metaKey);
+				return false;
+			}
 			if (!data?.path || data.nodeKind !== 'note' && data.nodeKind !== 'external-note') return true;
-			void this.openKnowledgeNote(file, data.path, event.ctrlKey || event.metaKey);
+			void this.openKnowledgeNote(currentFile, data.path, event.ctrlKey || event.metaKey);
 			return false;
 		};
 		ea.onDropHook = (data) => {
 			const dropped = this.collectDroppedItems(data);
 			if (dropped.length === 0) return false;
-			void this.addDroppedItems(data.ea, dropped, data.pointerPosition);
+			const currentFile = resolveCurrentViewFile(file, data.view.file);
+			void this.addDroppedItems(currentFile, data.ea, dropped, data.pointerPosition);
 			// Excalidraw 2.26.x treats true as "handled" here and skips its native text-link drop.
 			return true;
 		};
@@ -350,7 +384,9 @@ export class ExcalidrawIntegration {
 				if (positionSaveTimer !== null) window.clearTimeout(positionSaveTimer);
 				positionSaveTimer = window.setTimeout(() => {
 					positionSaveTimer = null;
-					this.persistCanvasPositions(file, latestElements);
+					const currentFile = resolveCurrentViewFile(file, view.file);
+					this.persistCanvasPositions(currentFile, latestElements);
+					this.syncCanvasReferencesFromElements(currentFile, latestElements);
 				}, 150);
 				this.scheduleBoldLayerSync(view, ea, latestElements);
 			},
@@ -364,11 +400,12 @@ export class ExcalidrawIntegration {
 			if (positionSaveTimer !== null) window.clearTimeout(positionSaveTimer);
 			const boldTimer = this.boldSyncTimers.get(view);
 			if (boldTimer !== undefined) window.clearTimeout(boldTimer);
-			this.persistCanvasPositions(file, latestElements);
+			this.persistCanvasPositions(resolveCurrentViewFile(file, unloadedView.file), latestElements);
 			removeDirectClick();
 			removeShortcuts();
 			removeResetMenuOption();
 			removeTextControls();
+			this.boundViews.delete(view);
 			ea.onLinkClickHook = undefined;
 			ea.onDropHook = undefined;
 			ea.onSceneChangeHook = null;
@@ -385,7 +422,7 @@ export class ExcalidrawIntegration {
 		// Do not inject the legacy whole-element B button because it duplicates
 		// the native control and competes for the textarea selection.
 		removeTextControls = (): void => undefined;
-		void this.polishManagedElements(ea);
+		void this.polishManagedElements(file, ea);
 		return true;
 	}
 
@@ -396,13 +433,13 @@ export class ExcalidrawIntegration {
 		const file = view.file;
 		const state = file ? this.store.getKnowledgeCanvas(file.path) : undefined;
 		if (!file || !state) {
-			new Notice('The active tab is not a knowledge map canvas.');
+			new Notice('当前标签页不是2维画布。');
 			return;
 		}
 		const ea = this.requireApi()?.getAPI?.(view);
 		if (!ea) return;
 		await this.renderFolderIntoView(file, state.folderPath, view, ea, false);
-		new Notice('Knowledge canvas refreshed.');
+		new Notice('2维画布已刷新。');
 	}
 
 	async goBackActiveKnowledgeCanvas(): Promise<void> {
@@ -411,18 +448,18 @@ export class ExcalidrawIntegration {
 		const view = leaf.view as unknown as ExcalidrawViewLike;
 		const file = view.file;
 		if (!file || !this.store.getKnowledgeCanvas(file.path)) {
-			new Notice('The active tab is not a knowledge map canvas.');
+			new Notice('当前标签页不是2维画布。');
 			return;
 		}
 		const ea = this.requireApi()?.getAPI?.(view);
 		if (!ea) return;
 		this.persistCanvasPositions(file, ea.getViewElements?.() ?? []);
 		const folderPath = this.store.goBackKnowledgeCanvas(file.path);
-		if (!folderPath) {
-			new Notice('There is no earlier folder in this canvas.');
+		if (folderPath) {
+			await this.renderFolderIntoView(file, folderPath, view, ea, false, false, false);
 			return;
 		}
-		await this.renderFolderIntoView(file, folderPath, view, ea, false, false, false);
+		await this.openParentKnowledgeCanvas(file);
 	}
 
 	async resetActiveKnowledgeCanvasLayout(): Promise<void> {
@@ -432,7 +469,7 @@ export class ExcalidrawIntegration {
 		const file = view.file;
 		const state = file ? this.store.getKnowledgeCanvas(file.path) : undefined;
 		if (!file || !state) {
-			new Notice('The active tab is not a knowledge map canvas.');
+			new Notice('当前标签页不是2维画布。');
 			return;
 		}
 		const ea = this.requireApi()?.getAPI?.(view);
@@ -468,11 +505,11 @@ export class ExcalidrawIntegration {
 		if (action === 'back') {
 			this.persistCanvasPositions(file, ea.getViewElements?.() ?? []);
 			const previous = this.store.goBackKnowledgeCanvas(file.path);
-			if (!previous) {
-				new Notice('There is no earlier folder in this canvas.');
+			if (previous) {
+				await this.renderFolderIntoView(file, previous, view, ea, false, false, false);
 				return;
 			}
-			await this.renderFolderIntoView(file, previous, view, ea, false, false, false);
+			await this.openParentKnowledgeCanvas(file);
 			return;
 		}
 		if (action === 'reset') {
@@ -504,26 +541,32 @@ export class ExcalidrawIntegration {
 			if (distance > 5 || elapsed > 600) return;
 			const openInNewLeaf = event.ctrlKey || event.metaKey;
 			window.setTimeout(() => {
+				const currentFile = resolveCurrentViewFile(file, view.file);
+				if (!this.store.getKnowledgeCanvas(currentFile.path)) return;
 				const element = ea.getViewSelectedElement?.();
 				if (!element) return;
 				const data = readKnowledgeCanvasData(element);
 				if (!data) return;
+				if (data.canvasType && data.path) {
+					void this.openManagedCanvasFile(currentFile, data.path, openInNewLeaf);
+					return;
+				}
 				if (data.action === 'folder' && data.path) {
-					void this.activateKnowledgeTarget(
-						file,
+					void this.activateFolderElement(
+						currentFile,
 						view,
 						ea,
-						{ action: 'folder', path: data.path },
+						data,
 						openInNewLeaf,
 					);
 					return;
 				}
 				if (data.action === 'back' || data.action === 'reset' || data.action === 'root') {
-					void this.activateKnowledgeTarget(file, view, ea, { action: data.action }, false);
+					void this.activateKnowledgeTarget(currentFile, view, ea, { action: data.action }, false);
 					return;
 				}
 				if (data.path && (data.nodeKind === 'note' || data.nodeKind === 'external-note')) {
-					void this.openKnowledgeNote(file, data.path, openInNewLeaf);
+					void this.openKnowledgeNote(currentFile, data.path, openInNewLeaf);
 				}
 			}, 0);
 		};
@@ -533,15 +576,26 @@ export class ExcalidrawIntegration {
 			if (!element || readFormulaLatex(element) === null) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			void this.openFormulaEditor(file, view, ea, element);
+			void this.openFormulaEditor(resolveCurrentViewFile(file, view.file), view, ea, element);
+		};
+		const onContextMenu = (event: MouseEvent): void => {
+			const element = ea.getViewSelectedElement?.();
+			const data = element ? readKnowledgeCanvasData(element) : null;
+			if (!data?.canvasType || !data.path) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			const currentFile = resolveCurrentViewFile(file, view.file);
+			this.showCanvasNodeMenu(currentFile, data.path, event);
 		};
 		container.addEventListener('pointerdown', onPointerDown, true);
 		container.addEventListener('pointerup', onPointerUp, true);
 		container.addEventListener('dblclick', onDoubleClick, true);
+		container.addEventListener('contextmenu', onContextMenu, true);
 		return () => {
 			container.removeEventListener('pointerdown', onPointerDown, true);
 			container.removeEventListener('pointerup', onPointerUp, true);
 			container.removeEventListener('dblclick', onDoubleClick, true);
+			container.removeEventListener('contextmenu', onContextMenu, true);
 		};
 	}
 
@@ -607,19 +661,25 @@ export class ExcalidrawIntegration {
 				};
 				const selectedFormula = readFormulaLatex(ea.getViewSelectedElement?.()) !== null;
 				addItem(
-					selectedFormula ? 'Edit formula' : 'Insert formula',
+					selectedFormula ? '编辑公式' : '插入公式',
 					'sigma',
 					() => void this.openFormulaEditor(
-						file,
+						resolveCurrentViewFile(file, view.file),
 						view,
 						ea,
 						selectedFormula ? ea.getViewSelectedElement?.() ?? null : null,
 					),
 				);
 				addItem(
-					'Reset knowledge layout',
+					'恢复知识布局',
 					'rotate-ccw',
-					() => void this.activateKnowledgeTarget(file, view, ea, { action: 'reset' }, false),
+					() => void this.activateKnowledgeTarget(
+						resolveCurrentViewFile(file, view.file),
+						view,
+						ea,
+						{ action: 'reset' },
+						false,
+					),
 				);
 			}
 		};
@@ -662,7 +722,7 @@ export class ExcalidrawIntegration {
 				event.stopImmediatePropagation();
 				const selected = ea.getViewSelectedElement?.() ?? null;
 				void this.openFormulaEditor(
-					file,
+					resolveCurrentViewFile(file, view.file),
 					view,
 					ea,
 					readFormulaLatex(selected) === null ? null : selected,
@@ -722,8 +782,8 @@ export class ExcalidrawIntegration {
 			button.type = 'button';
 			button.addClass('knowledge-map-excalidraw-bold-button');
 			button.toggleClass('is-active', active);
-			button.setAttribute('aria-label', 'Bold — Ctrl+B');
-			button.title = 'Bold — Ctrl+B';
+			button.setAttribute('aria-label', '粗体 — Ctrl+B');
+			button.title = '粗体 — Ctrl+B';
 			const icon = button.createDiv({ cls: 'ToolIcon__icon' });
 			icon.createSpan({ text: 'B', cls: 'knowledge-map-excalidraw-bold-letter' });
 			button.addEventListener('pointerdown', (event) => {
@@ -792,7 +852,7 @@ export class ExcalidrawIntegration {
 		if (!this.store.getKnowledgeCanvas(file.path)) return;
 		const container = view.containerEl;
 		if (!container || !ea.addImage || !ea.addElementsToView) {
-			new Notice('This Excalidraw version does not expose the image automation API.');
+			new Notice('当前 Excalidraw 版本未提供图像自动化接口。');
 			return;
 		}
 		if (container.ownerDocument.querySelector('.knowledge-map-formula-dialog')) return;
@@ -823,7 +883,7 @@ export class ExcalidrawIntegration {
 		if (!normalized) {
 			if (existing) {
 				ea.deleteViewElements?.([existing]);
-				new Notice('Formula removed.');
+				new Notice('公式已移除。');
 			}
 			return;
 		}
@@ -836,7 +896,7 @@ export class ExcalidrawIntegration {
 				view.containerEl?.ownerDocument ?? document,
 			);
 			if (!dataUrl) {
-				new Notice('Could not render the LaTeX formula.');
+				new Notice('无法渲染 LaTeX 公式。');
 				return;
 			}
 			const id = await ea.addImage({
@@ -847,12 +907,12 @@ export class ExcalidrawIntegration {
 				anchor: false,
 			});
 			if (!id) {
-				new Notice('Could not render the LaTeX formula.');
+				new Notice('无法渲染 LaTeX 公式。');
 				return;
 			}
 			const formula = ea.getElement(id);
 			if (!formula || formula.width === undefined || formula.height === undefined) {
-				new Notice('The rendered formula element was not available.');
+				new Notice('找不到已渲染的公式元素。');
 				return;
 			}
 			if (existing?.x !== undefined && existing.y !== undefined
@@ -876,13 +936,13 @@ export class ExcalidrawIntegration {
 			if (existing) ea.deleteViewElements?.([existing]);
 			const added = await ea.addElementsToView(false, true, true);
 			if (added === false) {
-				new Notice('Could not add the formula to Excalidraw.');
+				new Notice('无法将公式添加到 Excalidraw。');
 				return;
 			}
 			ea.selectElementsInView?.([id]);
 			new Notice(existing
-				? 'Formula updated and selected.'
-				: 'Formula inserted in the center of the visible canvas and selected.');
+				? '公式已更新并选中。'
+				: '公式已插入可见画布中央并选中。');
 		} finally {
 			this.stylingViews.delete(view);
 		}
@@ -932,11 +992,11 @@ export class ExcalidrawIntegration {
 			target ?? ea.getViewSelectedElement?.() ?? null,
 		);
 		if (!primary) {
-			new Notice('Select a text element in this knowledge canvas first.');
+			new Notice('请先在2维画布中选择一个文字元素。');
 			return;
 		}
 		if (primary.containerId) {
-			new Notice('Bold currently supports standalone text elements, not text bound inside a shape.');
+			new Notice('粗体目前仅支持独立文字，不支持绑定在形状内的文字。');
 			return;
 		}
 		if (!ea.copyViewElementsToEAforEditing || !ea.addElementsToView) return;
@@ -956,7 +1016,7 @@ export class ExcalidrawIntegration {
 				};
 				await ea.addElementsToView(false, true, false);
 				ea.selectElementsInView?.([primary.id]);
-				new Notice('Bold removed.');
+				new Notice('已取消粗体。');
 				return;
 			}
 			if (
@@ -990,7 +1050,7 @@ export class ExcalidrawIntegration {
 			};
 			await ea.addElementsToView(false, true, false);
 			ea.selectElementsInView?.([primary.id]);
-			new Notice('Bold applied.');
+			new Notice('已应用粗体。');
 		} finally {
 			this.stylingViews.delete(view);
 		}
@@ -1093,7 +1153,7 @@ export class ExcalidrawIntegration {
 		const view = leaf?.view as unknown as ExcalidrawViewLike | undefined;
 		const file = view?.file;
 		if (!view || !file || !this.store.getKnowledgeCanvas(file.path)) {
-			new Notice('The active tab is not a knowledge map canvas.');
+			new Notice('当前标签页不是2维画布。');
 			return null;
 		}
 		const ea = this.requireApi()?.getAPI?.(view);
@@ -1108,7 +1168,7 @@ export class ExcalidrawIntegration {
 		const state = this.store.getKnowledgeCanvas(file.path);
 		if (!state) return;
 		await this.renderFolderIntoView(file, state.folderPath, view, ea, false, true, false);
-		new Notice('Current folder layout restored to its default positions.');
+		new Notice('当前文件夹布局已恢复为默认位置。');
 	}
 
 	private async activateKnowledgeTarget(
@@ -1126,6 +1186,139 @@ export class ExcalidrawIntegration {
 		} finally {
 			window.setTimeout(() => this.navigationLocks.delete(key), 200);
 		}
+	}
+
+	private async activateFolderElement(
+		file: TFile,
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		openInNewLeaf: boolean,
+	): Promise<void> {
+		if (!data.path) return;
+		if (getKnowledgeCanvasFolderActivation(data) === 'open-child-canvas') {
+			const key = `child-canvas:${file.path}:${data.path}`;
+			if (this.navigationLocks.has(key)) return;
+			this.navigationLocks.add(key);
+			try {
+				this.persistCanvasPositions(file, ea.getViewElements?.() ?? []);
+				await this.openOrCreateChildKnowledgeCanvas(file, data.path);
+			} finally {
+				window.setTimeout(() => this.navigationLocks.delete(key), 200);
+			}
+			return;
+		}
+		await this.activateKnowledgeTarget(
+			file,
+			view,
+			ea,
+			{ action: 'folder', path: data.path },
+			openInNewLeaf,
+		);
+	}
+
+	private async openOrCreateChildKnowledgeCanvas(
+		parentFile: TFile,
+		folderPath: string,
+	): Promise<void> {
+		const childPath = this.store.findChildKnowledgeCanvas(parentFile.path, folderPath);
+		if (childPath) {
+			const childFile = this.app.vault.getAbstractFileByPath(childPath);
+			if (childFile instanceof TFile) {
+				await this.openKnowledgeCanvasFile(childFile.path, parentFile.path, true);
+				return;
+			}
+			this.store.removeKnowledgeCanvas(childPath);
+		}
+		await this.createKnowledgeCanvas(folderPath, parentFile.path);
+	}
+
+	private async openParentKnowledgeCanvas(childFile: TFile): Promise<void> {
+		const childState = this.store.getKnowledgeCanvas(childFile.path);
+		const parentPath = childState?.parentCanvasPath;
+		if (!parentPath) {
+			new Notice('当前已经是顶层2维画布。');
+			return;
+		}
+		const parentFile = this.app.vault.getAbstractFileByPath(parentPath);
+		if (!(parentFile instanceof TFile)) {
+			this.store.removeKnowledgeCanvas(parentPath);
+			new Notice('找不到父画布。');
+			return;
+		}
+		if (this.store.getKnowledgeCanvas(parentFile.path)?.canvasType === '3d') {
+			const existingGlobeLeaf = this.app.workspace
+				.getLeavesOfType('knowledge-map-globe-view')
+				.find((leaf) => {
+					return (leaf.view as unknown as { file?: TFile | null }).file?.path === parentFile.path;
+				});
+			if (existingGlobeLeaf) {
+				await this.app.workspace.revealLeaf(existingGlobeLeaf);
+				this.app.workspace.setActiveLeaf(existingGlobeLeaf, { focus: true });
+			} else {
+				await this.app.workspace.openLinkText(parentFile.path, childFile.path, false);
+			}
+			return;
+		}
+		const parentWasAlreadyOpen = await this.openKnowledgeCanvasFile(
+			parentFile.path,
+			childFile.path,
+			false,
+		);
+		if (parentWasAlreadyOpen) return;
+		const entryFolderPath = childState.history[0] ?? childState.folderPath;
+		await this.centerKnowledgeCanvasFolderNode(parentFile.path, entryFolderPath);
+	}
+
+	async centerKnowledgeCanvasFolderNode(
+		canvasPath: string,
+		folderPath: string,
+	): Promise<void> {
+		for (let attempt = 0; attempt < 30; attempt += 1) {
+			const leaf = this.app.workspace.getLeavesOfType(EXCALIDRAW_VIEW_TYPE).find((candidate) => {
+				const view = candidate.view as unknown as ExcalidrawViewLike;
+				return view.file?.path === canvasPath;
+			});
+			const view = leaf?.view as unknown as ExcalidrawViewLike | undefined;
+			const ea = view ? this.requireApi(false)?.getAPI?.(view) : undefined;
+			const element = ea?.getViewElements
+				? findKnowledgeCanvasFolderNode(ea.getViewElements(), folderPath)
+				: null;
+			if (view && element && view.excalidrawAPI?.setViewport) {
+				// Let Excalidraw finish its own open/reveal viewport restoration first.
+				await new Promise<void>((resolve) => window.setTimeout(resolve, 150));
+				const latestElement = ea?.getViewElements
+					? findKnowledgeCanvasFolderNode(ea.getViewElements(), folderPath)
+					: null;
+				if (!latestElement) return;
+				view.excalidrawAPI.setViewport({
+					target: latestElement,
+					fit: 'none',
+					animation: { duration: 220 },
+					offsets: { ui: true },
+				});
+				return;
+			}
+			await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+		}
+	}
+
+	private async openKnowledgeCanvasFile(
+		targetPath: string,
+		sourcePath: string,
+		openInNewLeaf: boolean,
+	): Promise<boolean> {
+		const existingLeaf = this.app.workspace.getLeavesOfType(EXCALIDRAW_VIEW_TYPE).find((leaf) => {
+			const candidate = leaf.view as unknown as ExcalidrawViewLike;
+			return candidate.file?.path === targetPath;
+		});
+		if (existingLeaf) {
+			await this.app.workspace.revealLeaf(existingLeaf);
+			this.app.workspace.setActiveLeaf(existingLeaf, { focus: true });
+			return true;
+		}
+		await this.app.workspace.openLinkText(targetPath, sourcePath, openInNewLeaf);
+		return false;
 	}
 
 	private async openKnowledgeNote(sourceFile: TFile, notePath: string, newLeaf: boolean): Promise<void> {
@@ -1152,7 +1345,7 @@ export class ExcalidrawIntegration {
 		const normalizedPath = normalizeFolderPath(folderPath);
 		const abstractFile = this.resolvePath(normalizedPath);
 		if (!(abstractFile instanceof TFolder)) {
-			new Notice(`Folder not found: ${normalizedPath}`);
+			new Notice(`找不到文件夹：${normalizedPath}`);
 			return;
 		}
 		this.renderingViews.add(view);
@@ -1171,10 +1364,16 @@ export class ExcalidrawIntegration {
 				: this.store.getKnowledgeCanvasPositions(file.path, normalizedPath);
 			const positions = createInitialPositions(graph, { ...sharedPositions, ...canvasPositions });
 			ea.reset();
-			this.addFolderMapToWorkbench(ea, graph, positions);
+			const state = this.store.getKnowledgeCanvas(file.path);
+			this.addFolderMapToWorkbench(
+				ea,
+				graph,
+				positions,
+				state ? canNavigateBackFromKnowledgeCanvas(state) : false,
+			);
 			const added = await ea.addElementsToView?.(false, true, true);
 			if (added === false) {
-				new Notice('Could not update the knowledge map elements in Excalidraw.');
+				new Notice('无法更新 Excalidraw 中的2维画布元素。');
 				return;
 			}
 			this.store.openKnowledgeCanvasFolder(file.path, normalizedPath, addToHistory);
@@ -1219,9 +1418,10 @@ export class ExcalidrawIntegration {
 		ea: ExcalidrawAutomateLike,
 		graph: FolderGraph,
 		positions: Record<string, SavedNodePosition>,
+		canGoBack: boolean,
 	): void {
 		this.addHeader(ea, graph.folderPath);
-		this.addNavigation(ea, graph.folderPath);
+		this.addNavigation(ea, canGoBack);
 		const elementIds = new Map<string, string>();
 
 		for (const node of graph.nodes) {
@@ -1243,15 +1443,14 @@ export class ExcalidrawIntegration {
 
 	private addHeader(ea: ExcalidrawAutomateLike, folderPath: string): void {
 		this.setTextStyle(ea, '#3f3a34', 22);
-		const breadcrumb = folderPath === ROOT_PATH ? 'Knowledge Map' : `Knowledge Map  /  ${folderPath}`;
+		const breadcrumb = folderPath === ROOT_PATH ? '2维画布' : `2维画布  /  ${folderPath}`;
 		const id = ea.addText(-360, -390, breadcrumb, { width: 720, textAlign: 'center' });
 		this.tag(ea, id, elementData('map', 'header', { path: folderPath }));
 	}
 
-	private addNavigation(ea: ExcalidrawAutomateLike, folderPath: string): void {
-		if (folderPath === ROOT_PATH) return;
-		this.addNavigationChip(ea, -118, -330, 108, 'Back', 'back');
-		this.addNavigationChip(ea, 10, -330, 108, 'Root', 'root');
+	private addNavigation(ea: ExcalidrawAutomateLike, canGoBack: boolean): void {
+		if (!canGoBack) return;
+		this.addNavigationChip(ea, -54, -330, 108, '返回', 'back');
 	}
 
 	private addNavigationChip(
@@ -1479,18 +1678,51 @@ export class ExcalidrawIntegration {
 			const path = (candidate as { path?: unknown }).path;
 			if (typeof path === 'string') abstractFile = this.resolvePath(path);
 		}
-		if (abstractFile instanceof TFolder || abstractFile instanceof TFile && abstractFile.extension === 'md') {
+		if (
+			abstractFile instanceof TFolder
+			|| abstractFile instanceof TFile && (
+				abstractFile.extension === 'md'
+				|| this.store.getKnowledgeCanvas(abstractFile.path)?.canvasType === '3d'
+			)
+		) {
 			items.set(abstractFile.path, abstractFile);
 		}
 	}
 
 	private async addDroppedItems(
+		parentFile: TFile,
 		ea: ExcalidrawAutomateLike,
 		items: TAbstractFile[],
 		pointer: { x: number; y: number },
 	): Promise<void> {
+		const existingCanvasTargets = new Set(
+			(ea.getViewElements?.() ?? []).flatMap((element): string[] => {
+				const data = readKnowledgeCanvasData(element);
+				return data?.canvasType && data.path ? [data.path] : [];
+			}),
+		);
 		ea.reset();
+		const canvasPaths: string[] = [];
+		let createdElementGroups = 0;
+		let attemptedSelfDrop = false;
 		items.forEach((item, index) => {
+			const canvasState = item instanceof TFile ? this.store.getKnowledgeCanvas(item.path) : undefined;
+			const column = index % 4;
+			const row = Math.floor(index / 4);
+			const centerX = pointer.x + column * 160;
+			const centerY = pointer.y + row * 160;
+			if (canvasState && item instanceof TFile) {
+				if (item.path === parentFile.path) {
+					attemptedSelfDrop = true;
+					return;
+				}
+				if (!existingCanvasTargets.has(item.path)) {
+					this.addManagedCanvasNode(ea, item, canvasState.canvasType, centerX, centerY);
+					createdElementGroups += 1;
+				}
+				canvasPaths.push(item.path);
+				return;
+			}
 			const isFolder = item instanceof TFolder;
 			const label = item instanceof TFile ? item.basename : item.name;
 			const node: MapNode = {
@@ -1499,25 +1731,171 @@ export class ExcalidrawIntegration {
 				path: item.path,
 				label,
 			};
-			const column = index % 4;
-			const row = Math.floor(index / 4);
-			this.addNode(ea, node, pointer.x + column * 140, pointer.y + row * 140, 'manual');
+			this.addNode(ea, node, centerX, centerY, 'manual');
+			createdElementGroups += 1;
 		});
-		const added = await ea.addElementsToView?.(false, true, true);
-		if (added === false) new Notice('Could not add the dropped vault items to Excalidraw.');
+		const added = createdElementGroups > 0
+			? await ea.addElementsToView?.(false, true, true)
+			: true;
+		if (added === false) new Notice('无法将拖入的仓库项目添加到 Excalidraw。');
+		else {
+			for (const childPath of canvasPaths) {
+				if (!this.store.addCanvasReference(parentFile.path, childPath)) {
+					new Notice('无法建立画布引用关系。');
+				}
+			}
+		}
+		if (attemptedSelfDrop) new Notice('不能把画布拖入它自己。');
 	}
 
-	private async polishManagedElements(ea: ExcalidrawAutomateLike): Promise<void> {
+	private syncCanvasReferencesFromElements(
+		sourceFile: TFile,
+		elements: readonly ExcalidrawElementLike[],
+	): void {
+		const visibleTargets = new Set(elements.flatMap((element): string[] => {
+			if (element.isDeleted) return [];
+			const data = readKnowledgeCanvasData(element);
+			return data?.canvasType && data.path ? [data.path] : [];
+		}));
+		for (const targetPath of visibleTargets) {
+			this.store.addCanvasReference(sourceFile.path, targetPath);
+		}
+		for (const targetPath of this.store.getOutgoingCanvasReferences(sourceFile.path)) {
+			if (!visibleTargets.has(targetPath)) {
+				this.store.removeCanvasReference(sourceFile.path, targetPath);
+			}
+		}
+	}
+
+	private addManagedCanvasNode(
+		ea: ExcalidrawAutomateLike,
+		file: TFile,
+		canvasType: '2d' | '3d',
+		centerX: number,
+		centerY: number,
+	): void {
+		const size = 92;
+		const x = centerX - size / 2;
+		const y = centerY - size / 2;
+		const data = elementData('manual', 'node', { canvasType, path: file.path });
+		const ids: string[] = [];
+		const stroke = canvasType === '3d' ? '#4b8fc9' : '#7860a8';
+		const background = canvasType === '3d' ? '#e8f4ff' : '#f1edfb';
+		const textColor = canvasType === '3d' ? '#244b68' : '#43345f';
+		this.setShapeStyle(ea, stroke, background, 2.2, 0);
+		const bodyId = ea.addEllipse(x, y, size, size);
+		this.tag(ea, bodyId, data);
+		ids.push(bodyId);
+
+		this.setShapeStyle(ea, stroke, 'transparent', 1.6, 0);
+		const iconIds = canvasType === '3d'
+			? [
+				ea.addEllipse(x + 27, y + 11, 38, 70),
+				ea.addEllipse(x + 11, y + 30, 70, 32),
+			]
+			: [
+				ea.addEllipse(x + 39, y + 17, 14, 14),
+				ea.addEllipse(x + 20, y + 59, 14, 14),
+				ea.addEllipse(x + 58, y + 59, 14, 14),
+				ea.addArrow([[centerX, y + 31], [x + 27, y + 59]], { startArrowHead: null, endArrowHead: null }),
+				ea.addArrow([[centerX, y + 31], [x + 65, y + 59]], { startArrowHead: null, endArrowHead: null }),
+			];
+		for (const id of iconIds) {
+			this.tag(ea, id, data);
+			ids.push(id);
+		}
+
+		this.setTextStyle(ea, textColor, 15);
+		const textId = ea.addText(centerX - 90, y + size + 10, canvasDisplayName(file.path), {
+			width: 180,
+			textAlign: 'center',
+			autoResize: false,
+		});
+		this.tag(ea, textId, elementData('manual', 'label', { canvasType, path: file.path }));
+		ids.push(textId);
+		ea.addToGroup?.(ids);
+	}
+
+	private async openManagedCanvasFile(
+		sourceFile: TFile,
+		targetPath: string,
+		openInNewLeaf: boolean,
+	): Promise<void> {
+		const target = this.app.vault.getAbstractFileByPath(targetPath);
+		const targetState = target instanceof TFile ? this.store.getKnowledgeCanvas(target.path) : undefined;
+		if (!(target instanceof TFile) || !targetState) {
+			new Notice('找不到对应的画布。');
+			return;
+		}
+		const viewType = targetState.canvasType === '3d' ? 'knowledge-map-globe-view' : EXCALIDRAW_VIEW_TYPE;
+		const existing = this.app.workspace.getLeavesOfType(viewType).find((leaf) => {
+			return (leaf.view as unknown as { file?: TFile | null }).file?.path === target.path;
+		});
+		if (existing) {
+			await this.app.workspace.revealLeaf(existing);
+			this.app.workspace.setActiveLeaf(existing, { focus: true });
+			return;
+		}
+		await this.app.workspace.openLinkText(target.path, sourceFile.path, openInNewLeaf);
+	}
+
+	private showCanvasNodeMenu(sourceFile: TFile, targetPath: string, event: MouseEvent): void {
+		const targetFile = this.app.vault.getAbstractFileByPath(targetPath);
+		if (!(targetFile instanceof TFile) || !this.store.getKnowledgeCanvas(targetFile.path)) return;
+		const isChild = this.store.getParentKnowledgeCanvasPath(targetPath) === sourceFile.path;
+		const menu = Menu.forEvent(event);
+		menu.addItem((item) => item
+			.setTitle('打开画布')
+			.setIcon('file')
+			.setSection('open')
+			.onClick(() => void this.openManagedCanvasFile(sourceFile, targetPath, false)));
+		menu.addItem((item) => item
+			.setTitle('在新标签页中打开')
+			.setIcon('file-plus')
+			.setSection('open')
+			.onClick(() => void this.openManagedCanvasFile(sourceFile, targetPath, true)));
+		menu.addItem((item) => item
+			.setTitle(isChild ? '取消设为子画布' : '设为子画布')
+			.setIcon(isChild ? 'unlink' : 'git-branch-plus')
+			.setSection('relationship')
+			.onClick(() => {
+				if (!this.store.addCanvasReference(sourceFile.path, targetPath)) {
+					new Notice('无法保留画布引用关系。');
+					return;
+				}
+				const changed = isChild
+					? this.store.clearParentKnowledgeCanvas(targetPath, sourceFile.path)
+					: this.store.setParentKnowledgeCanvas(targetPath, sourceFile.path);
+				new Notice(changed
+					? isChild ? '已取消子画布关系，引用关系仍然保留。' : '已设为当前画布的子画布。'
+					: '无法修改画布父子关系。');
+			}));
+		menu.showAtMouseEvent(event);
+	}
+
+	private async polishManagedElements(
+		file: TFile,
+		ea: ExcalidrawAutomateLike,
+	): Promise<void> {
 		if (!ea.getViewElements || !ea.copyViewElementsToEAforEditing || !ea.addElementsToView) return;
 		const allElements = ea.getViewElements();
-		const obsoleteResetElements = allElements.filter((element) => {
+		const state = this.store.getKnowledgeCanvas(file.path);
+		const canGoBack = state ? canNavigateBackFromKnowledgeCanvas(state) : false;
+		const obsoleteNavigationElements = allElements.filter((element) => {
 			const data = readKnowledgeCanvasData(element);
-			return data?.role === 'navigation' && data.action === 'reset';
+			return data?.role === 'navigation' && (
+				data.action === 'reset'
+				|| data.action === 'root'
+				|| data.action === 'back' && !canGoBack
+			);
 		});
-		if (obsoleteResetElements.length > 0) ea.deleteViewElements?.(obsoleteResetElements);
+		if (obsoleteNavigationElements.length > 0) {
+			ea.deleteViewElements?.(obsoleteNavigationElements);
+		}
+		const obsoleteIds = new Set(obsoleteNavigationElements.map((element) => element.id));
 		const managedElements = allElements.filter((element) => {
 			const data = readKnowledgeCanvasData(element);
-			return Boolean(data) && !(data?.role === 'navigation' && data.action === 'reset');
+			return Boolean(data) && !obsoleteIds.has(element.id);
 		});
 		if (managedElements.length === 0) return;
 		ea.reset();
@@ -1625,7 +2003,7 @@ export class ExcalidrawIntegration {
 	private requireApi(showNotice = true): ExcalidrawAutomateLike | null {
 		const api = window.ExcalidrawAutomate;
 		if (api) return api;
-		if (showNotice) new Notice('Install and enable the Excalidraw plugin to use freeform canvases.');
+		if (showNotice) new Notice('请安装并启用 Excalidraw 插件以使用自由画布。');
 		return null;
 	}
 }
