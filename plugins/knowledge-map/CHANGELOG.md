@@ -66,6 +66,13 @@ This GitHub checkpoint freezes the version accepted in Obsidian before the conte
 - Made context-menu move-backward and move-forward cross the nearest visually overlapping object instead of an unrelated off-screen scene element.
 - Excluded a node's bound text and attached connectors from visual-layer targets, while preserving Excalidraw's native keyboard and properties-panel ordering behavior.
 
+## Stage 4A accepted checkpoint - 2026-08-25
+
+- Added distinct compact context-menu headers for 2D canvases, 3D canvases, folder canvases, current folders, and ordinary vault files.
+- Gave each managed node type its own icon and accent color while keeping the menu aligned with Obsidian's native visual language.
+- Grouped open, relationship, and information commands into clearer sections and refined their labels and icons.
+- Forced managed-node actions to use the styled DOM menu so the same appearance is preserved across platforms.
+
 ## 0.1.0 - Unreleased
 
 ### Added

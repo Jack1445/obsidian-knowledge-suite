@@ -1910,23 +1910,32 @@ export class ExcalidrawIntegration {
 
 	private showCanvasNodeMenu(sourceFile: TFile, targetPath: string, event: MouseEvent): void {
 		const targetFile = this.app.vault.getAbstractFileByPath(targetPath);
-		if (!(targetFile instanceof TFile) || !this.store.getKnowledgeCanvas(targetFile.path)) return;
+		const targetState = targetFile instanceof TFile
+			? this.store.getKnowledgeCanvas(targetFile.path)
+			: undefined;
+		if (!(targetFile instanceof TFile) || !targetState) return;
 		const isChild = this.store.getParentKnowledgeCanvasPath(targetPath) === sourceFile.path;
-		const menu = Menu.forEvent(event);
+		const menu = this.createManagedNodeMenu(event);
+		this.addManagedNodeMenuHeader(
+			menu,
+			`${targetState.canvasType === '3d' ? '3维画布' : '2维画布'} · ${canvasDisplayName(targetPath)}`,
+			targetState.canvasType === '3d' ? 'globe-2' : 'network',
+			'canvas',
+		);
 		menu.addItem((item) => item
 			.setTitle('打开画布')
-			.setIcon('file')
-			.setSection('open')
+			.setIcon('panel-top-open')
+			.setSection('knowledge-map-open')
 			.onClick(() => void this.openManagedCanvasFile(sourceFile, targetPath, false)));
 		menu.addItem((item) => item
 			.setTitle('在新标签页中打开')
-			.setIcon('file-plus')
-			.setSection('open')
+			.setIcon('external-link')
+			.setSection('knowledge-map-open')
 			.onClick(() => void this.openManagedCanvasFile(sourceFile, targetPath, true)));
 		menu.addItem((item) => item
 			.setTitle(isChild ? '取消设为子画布' : '设为子画布')
 			.setIcon(isChild ? 'unlink' : 'git-branch-plus')
-			.setSection('relationship')
+			.setSection('knowledge-map-relationship')
 			.onClick(() => {
 				if (!this.store.addCanvasReference(sourceFile.path, targetPath)) {
 					new Notice('无法保留画布引用关系。');
@@ -1959,44 +1968,56 @@ export class ExcalidrawIntegration {
 			targetPath
 			&& this.store.getParentKnowledgeCanvasPath(targetPath) === sourceFile.path,
 		);
-		const menu = Menu.forEvent(event);
+		const menu = this.createManagedNodeMenu(event);
+		this.addManagedNodeMenuHeader(
+			menu,
+			`文件夹画布 · ${folderDisplayName(data.path)}`,
+			'folder-tree',
+			'folder',
+		);
 		menu.addItem((item) => item
-			.setTitle('打开子画布')
+			.setTitle('打开文件夹画布')
 			.setIcon('folder-open')
-			.setSection('open')
+			.setSection('knowledge-map-open')
 			.onClick(() => void this.activateFolderElement(sourceFile, view, ea, data, false)));
 		menu.addItem((item) => item
 			.setTitle('在新标签页中打开')
-			.setIcon('file-plus')
-			.setSection('open')
+			.setIcon('external-link')
+			.setSection('knowledge-map-open')
 			.onClick(() => void this.activateFolderElement(sourceFile, view, ea, data, true)));
 		menu.addItem((item) => item
 			.setTitle(isChild ? '取消设为子画布' : '设为子画布')
 			.setIcon(isChild ? 'unlink' : 'git-branch-plus')
-			.setSection('relationship')
+			.setSection('knowledge-map-relationship')
 			.onClick(() => void this.setFolderChildRelationship(sourceFile, data.path!, targetPath, isChild)));
 		menu.showAtMouseEvent(event);
 	}
 
 	private showCurrentFolderNodeMenu(folderPath: string, event: MouseEvent): void {
 		const folder = this.resolvePath(folderPath);
-		const menu = Menu.forEvent(event);
+		const menu = this.createManagedNodeMenu(event);
+		this.addManagedNodeMenuHeader(
+			menu,
+			`当前文件夹 · ${folderDisplayName(folderPath)}`,
+			'folder-check',
+			'folder',
+		);
 		menu.addItem((item) => item
 			.setTitle('当前画布对应此文件夹')
 			.setIcon('folder-check')
-			.setSection('relationship')
+			.setSection('knowledge-map-relationship')
 			.setDisabled(true));
 		if (folder instanceof TFolder) {
 			menu.addItem((item) => item
 				.setTitle('在文件列表中定位')
 				.setIcon('folder-search')
-				.setSection('info')
+				.setSection('knowledge-map-info')
 				.onClick(() => void this.revealInFileNavigation(folder)));
 		}
 		menu.addItem((item) => item
 			.setTitle('复制文件夹路径')
 			.setIcon('copy')
-			.setSection('info')
+			.setSection('knowledge-map-info')
 			.onClick(() => void this.copyVaultPath(folderPath)));
 		menu.showAtMouseEvent(event);
 	}
@@ -2029,29 +2050,52 @@ export class ExcalidrawIntegration {
 	}
 
 	private showFileNodeMenu(sourceFile: TFile, targetFile: TFile, event: MouseEvent): void {
-		const menu = Menu.forEvent(event);
+		const menu = this.createManagedNodeMenu(event);
+		this.addManagedNodeMenuHeader(
+			menu,
+			`文件 · ${targetFile.basename}`,
+			'file-text',
+			'file',
+		);
 		menu.addItem((item) => item
 			.setTitle('打开文件')
-			.setIcon('file')
-			.setSection('open')
+			.setIcon('panel-top-open')
+			.setSection('knowledge-map-open')
 			.onClick(() => void this.openKnowledgeNote(sourceFile, targetFile.path, false)));
 		menu.addItem((item) => item
 			.setTitle('在新标签页中打开')
-			.setIcon('file-plus')
-			.setSection('open')
+			.setIcon('external-link')
+			.setSection('knowledge-map-open')
 			.onClick(() => void this.openKnowledgeNote(sourceFile, targetFile.path, true)));
 		menu.addItem((item) => item
 			.setTitle('在文件列表中定位')
 			.setIcon('folder-search')
-			.setSection('info')
+			.setSection('knowledge-map-info')
 			.onClick(() => void this.revealInFileNavigation(targetFile)));
 		menu.addItem((item) => item
 			.setTitle('复制路径')
 			.setIcon('copy')
-			.setSection('info')
+			.setSection('knowledge-map-info')
 			.onClick(() => void this.copyVaultPath(targetFile.path)));
 		this.app.workspace.trigger('file-menu', menu, targetFile, 'knowledge-canvas');
 		menu.showAtMouseEvent(event);
+	}
+
+	private createManagedNodeMenu(event: MouseEvent): Menu {
+		return Menu.forEvent(event).setUseNativeMenu(false);
+	}
+
+	private addManagedNodeMenuHeader(
+		menu: Menu,
+		title: string,
+		icon: string,
+		kind: 'canvas' | 'file' | 'folder',
+	): void {
+		menu.addItem((item) => item
+			.setTitle(title)
+			.setIcon(icon)
+			.setIsLabel(true)
+			.setSection(`knowledge-map-header-${kind}`));
 	}
 
 	private async revealInFileNavigation(file: TAbstractFile): Promise<void> {

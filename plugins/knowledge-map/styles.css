@@ -920,6 +920,59 @@
 	display: inline-flex;
 }
 
+/* Managed canvas nodes use a compact Obsidian-native menu with a clear type header. */
+.menu:has(.menu-item[data-section^="knowledge-map-"]) {
+	min-width: 224px;
+	max-width: min(320px, calc(100vw - 24px));
+	padding: 6px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+}
+
+.menu:has(.menu-item[data-section^="knowledge-map-"]) .menu-item {
+	min-height: 32px;
+	padding: 5px 8px;
+	border-radius: var(--radius-s);
+	font-size: var(--font-ui-small);
+}
+
+.menu:has(.menu-item[data-section^="knowledge-map-"]) .menu-item-icon {
+	display: inline-grid;
+	place-items: center;
+	width: 18px;
+	height: 18px;
+	color: var(--text-muted);
+}
+
+.menu:has(.menu-item[data-section^="knowledge-map-"]) .menu-item[data-section^="knowledge-map-header-"] {
+	min-height: 38px;
+	margin-bottom: 4px;
+	padding: 7px 8px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	border-radius: 0;
+	color: var(--text-normal);
+	font-weight: var(--font-semibold);
+	line-height: 1.25;
+}
+
+.menu:has(.menu-item[data-section^="knowledge-map-"]) .menu-item[data-section="knowledge-map-header-canvas"] .menu-item-icon {
+	color: var(--color-purple);
+}
+
+.menu:has(.menu-item[data-section^="knowledge-map-"]) .menu-item[data-section="knowledge-map-header-folder"] .menu-item-icon {
+	color: var(--color-orange);
+}
+
+.menu:has(.menu-item[data-section^="knowledge-map-"]) .menu-item[data-section="knowledge-map-header-file"] .menu-item-icon {
+	color: var(--color-blue);
+}
+
+.menu:has(.menu-item[data-section^="knowledge-map-"]) .menu-separator {
+	margin: 4px 6px;
+	border-color: var(--background-modifier-border);
+}
+
 /* Knowledge-canvas-only text weight control, inserted into Excalidraw's font row. */
 .excalidraw .panelColumn .buttonList.knowledge-map-excalidraw-font-row,
 .excalidraw .knowledge-map-excalidraw-font-row {
