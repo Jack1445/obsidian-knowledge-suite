@@ -20,6 +20,7 @@ import {
 	KNOWLEDGE_CANVAS_DATA_KEY,
 	canNavigateBackFromKnowledgeCanvas,
 	findKnowledgeCanvasFolderNode,
+	getKnowledgeCanvasContextTarget,
 	getKnowledgeCanvasFolderActivation,
 	parseKnowledgeCanvasLink,
 	readKnowledgeCanvasData,
@@ -596,11 +597,20 @@ export class ExcalidrawIntegration {
 				ea.getViewSelectedElement?.(),
 			);
 			const data = element ? readKnowledgeCanvasData(element) : null;
-			if (!data?.canvasType || !data.path) return;
+			const targetType = getKnowledgeCanvasContextTarget(data);
+			if (targetType === 'native' || !data?.path) return;
+			const targetFile = this.app.vault.getAbstractFileByPath(data.path);
+			if (targetType === 'file' && !(targetFile instanceof TFile)) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
 			const currentFile = resolveCurrentViewFile(file, view.file);
-			this.showCanvasNodeMenu(currentFile, data.path, event);
+			if (targetType === 'canvas') {
+				this.showCanvasNodeMenu(currentFile, data.path, event);
+			} else if (targetType === 'folder') {
+				this.showFolderNodeMenu(currentFile, view, ea, data, event);
+			} else if (targetFile instanceof TFile) {
+				this.showFileNodeMenu(currentFile, targetFile, event);
+			}
 		};
 		container.addEventListener('pointerdown', onPointerDown, true);
 		container.addEventListener('pointerup', onPointerUp, true);
@@ -1240,7 +1250,7 @@ export class ExcalidrawIntegration {
 			this.navigationLocks.add(key);
 			try {
 				this.persistCanvasPositions(file, ea.getViewElements?.() ?? []);
-				await this.openOrCreateChildKnowledgeCanvas(file, data.path);
+				await this.openOrCreateChildKnowledgeCanvas(file, data.path, openInNewLeaf);
 			} finally {
 				window.setTimeout(() => this.navigationLocks.delete(key), 200);
 			}
@@ -1258,17 +1268,33 @@ export class ExcalidrawIntegration {
 	private async openOrCreateChildKnowledgeCanvas(
 		parentFile: TFile,
 		folderPath: string,
+		openInNewLeaf: boolean,
 	): Promise<void> {
-		const childPath = this.store.findChildKnowledgeCanvas(parentFile.path, folderPath);
+		const childPath = this.findFolderCanvasPath(parentFile.path, folderPath);
 		if (childPath) {
 			const childFile = this.app.vault.getAbstractFileByPath(childPath);
 			if (childFile instanceof TFile) {
-				await this.openKnowledgeCanvasFile(childFile.path, parentFile.path, true);
+				this.store.addCanvasReference(parentFile.path, childFile.path);
+				await this.openKnowledgeCanvasFile(childFile.path, parentFile.path, openInNewLeaf);
 				return;
 			}
 			this.store.removeKnowledgeCanvas(childPath);
 		}
-		await this.createKnowledgeCanvas(folderPath, parentFile.path);
+		const createdPath = await this.createKnowledgeCanvas(folderPath, parentFile.path);
+		if (createdPath) this.store.addCanvasReference(parentFile.path, createdPath);
+	}
+
+	private findFolderCanvasPath(sourceCanvasPath: string, folderPath: string): string | null {
+		const normalizedFolderPath = normalizeFolderPath(folderPath);
+		const childPath = this.store.findChildKnowledgeCanvas(
+			sourceCanvasPath,
+			normalizedFolderPath,
+		);
+		if (childPath) return childPath;
+		return this.store.getOutgoingCanvasReferences(sourceCanvasPath).find((targetPath) => {
+			const state = this.store.getKnowledgeCanvas(targetPath);
+			return state?.canvasType === '2d' && state.folderPath === normalizedFolderPath;
+		}) ?? null;
 	}
 
 	private async openParentKnowledgeCanvas(childFile: TFile): Promise<void> {
@@ -1793,7 +1819,12 @@ export class ExcalidrawIntegration {
 		const visibleTargets = new Set(elements.flatMap((element): string[] => {
 			if (element.isDeleted) return [];
 			const data = readKnowledgeCanvasData(element);
-			return data?.canvasType && data.path ? [data.path] : [];
+			if (data?.canvasType && data.path) return [data.path];
+			if (data?.nodeKind === 'folder' && data.path) {
+				const folderCanvasPath = this.findFolderCanvasPath(sourceFile.path, data.path);
+				return folderCanvasPath ? [folderCanvasPath] : [];
+			}
+			return [];
 		}));
 		for (const targetPath of visibleTargets) {
 			this.store.addCanvasReference(sourceFile.path, targetPath);
@@ -1909,6 +1940,138 @@ export class ExcalidrawIntegration {
 					: '无法修改画布父子关系。');
 			}));
 		menu.showAtMouseEvent(event);
+	}
+
+	private showFolderNodeMenu(
+		sourceFile: TFile,
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		event: MouseEvent,
+	): void {
+		if (!data.path) return;
+		if (data.nodeKind === 'current-folder') {
+			this.showCurrentFolderNodeMenu(data.path, event);
+			return;
+		}
+		const targetPath = this.findFolderCanvasPath(sourceFile.path, data.path);
+		const isChild = Boolean(
+			targetPath
+			&& this.store.getParentKnowledgeCanvasPath(targetPath) === sourceFile.path,
+		);
+		const menu = Menu.forEvent(event);
+		menu.addItem((item) => item
+			.setTitle('打开子画布')
+			.setIcon('folder-open')
+			.setSection('open')
+			.onClick(() => void this.activateFolderElement(sourceFile, view, ea, data, false)));
+		menu.addItem((item) => item
+			.setTitle('在新标签页中打开')
+			.setIcon('file-plus')
+			.setSection('open')
+			.onClick(() => void this.activateFolderElement(sourceFile, view, ea, data, true)));
+		menu.addItem((item) => item
+			.setTitle(isChild ? '取消设为子画布' : '设为子画布')
+			.setIcon(isChild ? 'unlink' : 'git-branch-plus')
+			.setSection('relationship')
+			.onClick(() => void this.setFolderChildRelationship(sourceFile, data.path!, targetPath, isChild)));
+		menu.showAtMouseEvent(event);
+	}
+
+	private showCurrentFolderNodeMenu(folderPath: string, event: MouseEvent): void {
+		const folder = this.resolvePath(folderPath);
+		const menu = Menu.forEvent(event);
+		menu.addItem((item) => item
+			.setTitle('当前画布对应此文件夹')
+			.setIcon('folder-check')
+			.setSection('relationship')
+			.setDisabled(true));
+		if (folder instanceof TFolder) {
+			menu.addItem((item) => item
+				.setTitle('在文件列表中定位')
+				.setIcon('folder-search')
+				.setSection('info')
+				.onClick(() => void this.revealInFileNavigation(folder)));
+		}
+		menu.addItem((item) => item
+			.setTitle('复制文件夹路径')
+			.setIcon('copy')
+			.setSection('info')
+			.onClick(() => void this.copyVaultPath(folderPath)));
+		menu.showAtMouseEvent(event);
+	}
+
+	private async setFolderChildRelationship(
+		sourceFile: TFile,
+		folderPath: string,
+		existingTargetPath: string | null,
+		isChild: boolean,
+	): Promise<void> {
+		if (isChild && existingTargetPath) {
+			this.store.addCanvasReference(sourceFile.path, existingTargetPath);
+			const changed = this.store.clearParentKnowledgeCanvas(existingTargetPath, sourceFile.path);
+			new Notice(changed
+				? '已取消子画布关系，引用关系仍然保留。'
+				: '无法修改画布父子关系。');
+			return;
+		}
+		let targetPath = existingTargetPath;
+		if (!targetPath) {
+			targetPath = await this.createKnowledgeCanvas(folderPath, sourceFile.path);
+			if (!targetPath) return;
+		}
+		if (!this.store.addCanvasReference(sourceFile.path, targetPath)) {
+			new Notice('无法保留画布引用关系。');
+			return;
+		}
+		const changed = this.store.setParentKnowledgeCanvas(targetPath, sourceFile.path);
+		new Notice(changed ? '已设为当前画布的子画布。' : '无法修改画布父子关系。');
+	}
+
+	private showFileNodeMenu(sourceFile: TFile, targetFile: TFile, event: MouseEvent): void {
+		const menu = Menu.forEvent(event);
+		menu.addItem((item) => item
+			.setTitle('打开文件')
+			.setIcon('file')
+			.setSection('open')
+			.onClick(() => void this.openKnowledgeNote(sourceFile, targetFile.path, false)));
+		menu.addItem((item) => item
+			.setTitle('在新标签页中打开')
+			.setIcon('file-plus')
+			.setSection('open')
+			.onClick(() => void this.openKnowledgeNote(sourceFile, targetFile.path, true)));
+		menu.addItem((item) => item
+			.setTitle('在文件列表中定位')
+			.setIcon('folder-search')
+			.setSection('info')
+			.onClick(() => void this.revealInFileNavigation(targetFile)));
+		menu.addItem((item) => item
+			.setTitle('复制路径')
+			.setIcon('copy')
+			.setSection('info')
+			.onClick(() => void this.copyVaultPath(targetFile.path)));
+		this.app.workspace.trigger('file-menu', menu, targetFile, 'knowledge-canvas');
+		menu.showAtMouseEvent(event);
+	}
+
+	private async revealInFileNavigation(file: TAbstractFile): Promise<void> {
+		const leaf = this.app.workspace.getLeavesOfType('file-explorer')[0];
+		if (!leaf) {
+			new Notice('文件列表当前未打开。');
+			return;
+		}
+		await this.app.workspace.revealLeaf(leaf);
+		const view = leaf.view as unknown as { revealInFolder?: (target: TAbstractFile) => Promise<void> | void };
+		await view.revealInFolder?.(file);
+	}
+
+	private async copyVaultPath(path: string): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(path);
+			new Notice('路径已复制。');
+		} catch {
+			new Notice('无法复制路径。');
+		}
 	}
 
 	private async polishManagedElements(

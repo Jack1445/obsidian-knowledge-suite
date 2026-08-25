@@ -3,6 +3,7 @@ import {
 	canNavigateBackFromKnowledgeCanvas,
 	createKnowledgeCanvasLink,
 	findKnowledgeCanvasFolderNode,
+	getKnowledgeCanvasContextTarget,
 	getKnowledgeCanvasFolderActivation,
 	parseKnowledgeCanvasLink,
 	readKnowledgeCanvasData,
@@ -77,6 +78,42 @@ describe('knowledge canvas metadata', () => {
 		expect(resolveContextMenuElement(pointerTarget, previouslySelected)).toBe(pointerTarget);
 		expect(resolveContextMenuElement(null, previouslySelected)).toBeNull();
 		expect(resolveContextMenuElement(undefined, previouslySelected)).toBe(previouslySelected);
+	});
+
+	it('routes context menus by the managed node represented under the pointer', () => {
+		expect(getKnowledgeCanvasContextTarget({
+			managed: true,
+			scope: 'manual',
+			role: 'node',
+			canvasType: '3d',
+			path: 'World.canvas3d',
+		})).toBe('canvas');
+		expect(getKnowledgeCanvasContextTarget({
+			managed: true,
+			scope: 'manual',
+			role: 'label',
+			nodeKind: 'folder',
+			path: 'Projects',
+		})).toBe('folder');
+		expect(getKnowledgeCanvasContextTarget({
+			managed: true,
+			scope: 'map',
+			role: 'node',
+			nodeKind: 'current-folder',
+			path: 'Projects',
+		})).toBe('folder');
+		expect(getKnowledgeCanvasContextTarget({
+			managed: true,
+			scope: 'map',
+			role: 'node',
+			nodeKind: 'note',
+			path: 'Projects/Note.md',
+		})).toBe('file');
+		expect(getKnowledgeCanvasContextTarget({
+			managed: true,
+			scope: 'manual',
+			role: 'formula',
+		})).toBe('native');
 	});
 
 	it('finds the parent folder button that opened a child canvas', () => {

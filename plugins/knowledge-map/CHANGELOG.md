@@ -43,6 +43,15 @@ This GitHub checkpoint freezes the version accepted in Obsidian before the conte
 - Right-clicking blank canvas no longer reuses a stale managed-canvas selection.
 - Added compatibility fallback behavior for older Excalidraw builds that do not expose pointer hit testing.
 
+## Stage 2 accepted checkpoint - 2026-08-25
+
+- Routed direct right-click by node type: managed 2D/3D canvases, folders, vault files, and ordinary Excalidraw elements now receive their appropriate menus.
+- Added file-node actions for opening, opening in a new tab, revealing in the file list, copying the vault path, and Obsidian file-menu extensions.
+- Added folder-node actions for opening persistent child canvases and explicitly setting or clearing the structural child relationship.
+- Kept folder-canvas references after clearing a parent relationship so reopening a folder does not create a duplicate canvas.
+- Recognized the generated current-folder node separately and prevented the current canvas from becoming its own child.
+- Preserved Excalidraw's native context menu for ordinary shapes and blank canvas areas.
+
 ## 0.1.0 - Unreleased
 
 ### Added

@@ -26,6 +26,7 @@ export interface KnowledgeCanvasLink {
 }
 
 export type KnowledgeCanvasFolderActivation = 'open-child-canvas';
+export type KnowledgeCanvasContextTarget = 'canvas' | 'file' | 'folder' | 'native';
 
 /**
  * Folder navigation always crosses a persisted parent/child canvas edge.
@@ -64,6 +65,17 @@ export function resolveContextMenuElement<T>(
 	selectedElement: T | null | undefined,
 ): T | null {
 	return hitElement === undefined ? selectedElement ?? null : hitElement;
+}
+
+/** Classifies a managed element without coupling menu routing to selection state. */
+export function getKnowledgeCanvasContextTarget(
+	data: KnowledgeCanvasElementData | null,
+): KnowledgeCanvasContextTarget {
+	if (data?.canvasType && data.path) return 'canvas';
+	if (!data?.path || data.role !== 'node' && data.role !== 'label') return 'native';
+	if (data.nodeKind === 'folder' || data.nodeKind === 'current-folder') return 'folder';
+	if (data.nodeKind === 'note' || data.nodeKind === 'external-note') return 'file';
+	return 'native';
 }
 
 export function findKnowledgeCanvasFolderNode<T extends { customData?: unknown }>(
