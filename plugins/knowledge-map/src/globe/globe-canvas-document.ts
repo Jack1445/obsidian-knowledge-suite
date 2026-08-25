@@ -1,13 +1,24 @@
 import type { MapNode } from '../core/graph';
 import type { GlobePosition } from '../data/schema';
+import {
+	mergeKnowledgeCanvasNodeAppearance,
+	type KnowledgeCanvasNodeAppearance,
+} from '../integrations/knowledge-canvas-model';
 
 export const GLOBE_CANVAS_FILE_EXTENSION = 'canvas3d';
 export const GLOBE_CANVAS_DOCUMENT_TYPE = 'knowledge-map-globe';
 export const GLOBE_CANVAS_DOCUMENT_VERSION = 1;
 
+export interface GlobeNodeSize {
+	width: number;
+	height: number;
+}
+
 export interface GlobeCanvasNode extends MapNode {
 	kind: 'folder' | 'note';
 	position: GlobePosition;
+	appearance?: KnowledgeCanvasNodeAppearance;
+	size?: GlobeNodeSize;
 }
 
 export interface GlobeCanvasDocument {
@@ -49,6 +60,10 @@ export function parseGlobeCanvasDocument(raw: string): GlobeCanvasDocument {
 					lat: Math.max(-90, Math.min(90, node.position.lat)),
 					lng: normalizeLongitude(node.position.lng),
 				},
+				...(node.appearance ? { appearance: mergeKnowledgeCanvasNodeAppearance(node.appearance) } : {}),
+				...(node.size && Number.isFinite(node.size.width) && Number.isFinite(node.size.height) ? {
+					size: normalizeGlobeNodeSize(node.size),
+				} : {}),
 			}];
 		});
 		return {
@@ -82,6 +97,39 @@ export function setGlobeCanvasNodePosition(
 	return {
 		...document,
 		nodes: document.nodes.map((node) => node.id === nodeId ? { ...node, position } : node),
+	};
+}
+
+export function setGlobeCanvasNodeAppearance(
+	document: GlobeCanvasDocument,
+	nodeId: string,
+	appearance: KnowledgeCanvasNodeAppearance,
+): GlobeCanvasDocument {
+	return {
+		...document,
+		nodes: document.nodes.map((node) => node.id === nodeId
+			? { ...node, appearance: mergeKnowledgeCanvasNodeAppearance(appearance) }
+			: node),
+	};
+}
+
+export function setGlobeCanvasNodeSize(
+	document: GlobeCanvasDocument,
+	nodeId: string,
+	size: GlobeNodeSize,
+): GlobeCanvasDocument {
+	return {
+		...document,
+		nodes: document.nodes.map((node) => node.id === nodeId
+			? { ...node, size: normalizeGlobeNodeSize(size) }
+			: node),
+	};
+}
+
+function normalizeGlobeNodeSize(size: GlobeNodeSize): GlobeNodeSize {
+	return {
+		width: Math.round(Math.max(72, Math.min(320, size.width))),
+		height: Math.round(Math.max(36, Math.min(140, size.height))),
 	};
 }
 

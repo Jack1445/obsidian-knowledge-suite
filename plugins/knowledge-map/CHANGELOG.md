@@ -99,6 +99,15 @@ This GitHub checkpoint freezes the version accepted in Obsidian before the conte
 - Verified SHA-256 equality between all staged plugin artifacts and the files deployed to the acceptance Vault.
 - Produced the accepted `obsidian-knowledge-suite-v1.0.0.zip` release package.
 
+## Stage 6 accepted checkpoint - 2026-08-25
+
+- Reworked the 3D canvas background with layered nebula gradients and a denser colored WebGL star field.
+- Replaced low-contrast globe labels with readable icon-and-title nodes for files, folders, 2D canvases, and 3D canvases.
+- Added the same persistent color, shape, custom-color, and icon controls used by managed 2D nodes.
+- Added direct 3D node context menus for opening files and canvases and managing parent-child canvas relationships.
+- Persisted 3D node appearance and dimensions inside each `.canvas3d` document with backward-compatible parsing.
+- Restored the accepted horizontal node layout and added independent resizing from all four edges while preserving center-drag geographic movement.
+
 ## 0.1.0 - Unreleased
 
 ### Added

@@ -1,4 +1,5 @@
 import {
+	Menu,
 	Notice,
 	setIcon,
 	TAbstractFile,
@@ -8,18 +9,53 @@ import {
 	type WorkspaceLeaf,
 } from 'obsidian';
 import type KnowledgeMapPlugin from '../main';
-import type { FolderGraph } from '../core/graph';
 import { GlobeRenderer } from '../globe/globe-renderer';
 import {
 	addGlobeCanvasNodes,
 	createEmptyGlobeCanvasDocument,
 	parseGlobeCanvasDocument,
 	serializeGlobeCanvasDocument,
+	setGlobeCanvasNodeAppearance,
 	setGlobeCanvasNodePosition,
+	setGlobeCanvasNodeSize,
 	type GlobeCanvasNode,
 } from '../globe/globe-canvas-document';
+import {
+	mergeKnowledgeCanvasNodeAppearance,
+	type KnowledgeCanvasNodeAppearance,
+	type KnowledgeCanvasNodePalette,
+	type KnowledgeCanvasNodeShape,
+} from '../integrations/knowledge-canvas-model';
+import { CustomNodeColorDialog } from '../ui/custom-node-color-dialog';
+import { ManagedNodeIconDialog } from '../ui/managed-node-icon-dialog';
 
 export const KNOWLEDGE_MAP_GLOBE_VIEW_TYPE = 'knowledge-map-globe-view';
+
+const GLOBE_NODE_PALETTES: readonly { id: KnowledgeCanvasNodePalette; label: string }[] = [
+	{ id: 'default', label: '默认' },
+	{ id: 'blue', label: '蓝色' },
+	{ id: 'purple', label: '紫色' },
+	{ id: 'green', label: '绿色' },
+	{ id: 'orange', label: '橙色' },
+	{ id: 'red', label: '红色' },
+];
+
+const GLOBE_NODE_EXTENDED_PALETTES: readonly { id: KnowledgeCanvasNodePalette; label: string }[] = [
+	{ id: 'gray', label: '灰色' }, { id: 'black', label: '黑色' },
+	{ id: 'cyan', label: '青色' }, { id: 'teal', label: '蓝绿色' },
+	{ id: 'indigo', label: '靛蓝色' }, { id: 'violet', label: '罗兰紫' },
+	{ id: 'magenta', label: '品红色' }, { id: 'pink', label: '粉色' },
+	{ id: 'rose', label: '玫红色' }, { id: 'lime', label: '青柠色' },
+	{ id: 'yellow', label: '黄色' }, { id: 'amber', label: '琥珀色' },
+	{ id: 'brown', label: '棕色' },
+];
+
+const GLOBE_NODE_SHAPES: readonly { id: KnowledgeCanvasNodeShape; label: string }[] = [
+	{ id: 'ellipse', label: '圆形' },
+	{ id: 'rounded', label: '圆角方形' },
+	{ id: 'rectangle', label: '方形' },
+	{ id: 'diamond', label: '菱形' },
+];
 
 export class GlobeView extends TextFileView {
 	private document = createEmptyGlobeCanvasDocument();
@@ -111,14 +147,13 @@ export class GlobeView extends TextFileView {
 		const validNodes = this.document.nodes.filter((node) => {
 			return this.app.vault.getAbstractFileByPath(node.path) instanceof TAbstractFile;
 		});
-		const graph: FolderGraph = {
-			folderPath: this.plugin.store.getKnowledgeCanvas(this.file?.path ?? '')?.folderPath ?? '/',
-			nodes: validNodes,
-			edges: [],
-		};
 		this.renderer = new GlobeRenderer({
 			container: this.globeEl,
-			graph,
+			nodes: validNodes.map((node) => ({
+				...node,
+				appearance: mergeKnowledgeCanvasNodeAppearance(node.appearance),
+				canvasType: this.plugin.store.getKnowledgeCanvas(node.path)?.canvasType,
+			})),
 			positions: Object.fromEntries(this.document.nodes.map((node) => [node.id, node.position])),
 			onNodeActivate: (node, event) => {
 				const canvasState = this.plugin.store.getKnowledgeCanvas(node.path);
@@ -134,8 +169,16 @@ export class GlobeView extends TextFileView {
 				const newLeaf = event.ctrlKey || event.metaKey || event.button === 1;
 				void this.app.workspace.openLinkText(node.path, this.file?.path ?? '', newLeaf);
 			},
+			onNodeContextMenu: (node, event) => {
+				const documentNode = this.document.nodes.find((candidate) => candidate.id === node.id);
+				if (documentNode) this.showNodeMenu(documentNode, event);
+			},
 			onPositionChange: (nodeId, position) => {
 				this.document = setGlobeCanvasNodePosition(this.document, nodeId, position);
+				this.queueDocumentSave();
+			},
+			onSizeChange: (nodeId, size) => {
+				this.document = setGlobeCanvasNodeSize(this.document, nodeId, size);
 				this.queueDocumentSave();
 			},
 		});
@@ -199,6 +242,268 @@ export class GlobeView extends TextFileView {
 		}
 		this.renderGlobe();
 		new Notice(`已添加 ${nodes.length} 个项目到3维画布。`);
+	}
+
+	private showNodeMenu(node: GlobeCanvasNode, event: MouseEvent): void {
+		if (!this.file) return;
+		const target = this.app.vault.getAbstractFileByPath(node.path);
+		if (!(target instanceof TFile) && !(target instanceof TFolder)) return;
+		const canvasState = target instanceof TFile
+			? this.plugin.store.getKnowledgeCanvas(target.path)
+			: undefined;
+		const menu = Menu.forEvent(event).setUseNativeMenu(false);
+		const kind = canvasState ? 'canvas' : target instanceof TFolder ? 'folder' : 'file';
+		menu.addItem((item) => item
+			.setTitle(canvasState
+				? `${canvasState.canvasType === '3d' ? '3维画布' : '2维画布'} · ${target.name.replace(/\.(?:canvas3d|excalidraw\.md)$/i, '')}`
+				: target instanceof TFolder ? `文件夹 · ${target.name}` : `文件 · ${target.basename}`)
+			.setIcon(canvasState ? canvasState.canvasType === '3d' ? 'globe-2' : 'network' : target instanceof TFolder ? 'folder-tree' : 'file-text')
+			.setIsLabel(true)
+			.setSection(`knowledge-map-header-${kind}`));
+
+		if (canvasState && target instanceof TFile) {
+			const isChild = this.plugin.store.getParentKnowledgeCanvasPath(target.path) === this.file.path;
+			menu.addItem((item) => item
+				.setTitle('打开画布')
+				.setIcon('panel-top-open')
+				.setSection('knowledge-map-open')
+				.onClick(() => void this.plugin.openManagedCanvasFile(target.path, false, this.file?.path ?? '')));
+			menu.addItem((item) => item
+				.setTitle('在新标签页中打开')
+				.setIcon('external-link')
+				.setSection('knowledge-map-open')
+				.onClick(() => void this.plugin.openManagedCanvasFile(target.path, true, this.file?.path ?? '')));
+			menu.addItem((item) => item
+				.setTitle(isChild ? '取消设为子画布' : '设为子画布')
+				.setIcon(isChild ? 'unlink' : 'git-branch-plus')
+				.setSection('knowledge-map-relationship')
+				.onClick(() => this.setCanvasChildRelationship(target.path, isChild)));
+		} else if (target instanceof TFolder) {
+			const childPath = this.plugin.store.findChildKnowledgeCanvas(this.file.path, target.path, '3d');
+			const isChild = Boolean(childPath);
+			menu.addItem((item) => item
+				.setTitle('打开文件夹画布')
+				.setIcon('folder-open')
+				.setSection('knowledge-map-open')
+				.onClick(() => void this.plugin.openOrCreateChildGlobeCanvas(this.file!.path, target.path)));
+			menu.addItem((item) => item
+				.setTitle(isChild ? '取消设为子画布' : '设为子画布')
+				.setIcon(isChild ? 'unlink' : 'git-branch-plus')
+				.setSection('knowledge-map-relationship')
+				.onClick(() => void this.setFolderChildRelationship(target.path, childPath)));
+		} else if (target instanceof TFile) {
+			menu.addItem((item) => item
+				.setTitle('打开文件')
+				.setIcon('panel-top-open')
+				.setSection('knowledge-map-open')
+				.onClick(() => void this.app.workspace.openLinkText(target.path, this.file?.path ?? '', false)));
+			menu.addItem((item) => item
+				.setTitle('在新标签页中打开')
+				.setIcon('external-link')
+				.setSection('knowledge-map-open')
+				.onClick(() => void this.app.workspace.openLinkText(target.path, this.file?.path ?? '', true)));
+			menu.addItem((item) => item
+				.setTitle('在文件列表中定位')
+				.setIcon('folder-search')
+				.setSection('knowledge-map-info')
+				.onClick(() => void this.revealInFileNavigation(target)));
+			menu.addItem((item) => item
+				.setTitle('复制路径')
+				.setIcon('copy')
+				.setSection('knowledge-map-info')
+				.onClick(() => void this.copyVaultPath(target.path)));
+		}
+		this.addNodeAppearanceControls(menu, node, event);
+		if (target instanceof TFile && !canvasState) {
+			this.app.workspace.trigger('file-menu', menu, target, 'knowledge-globe');
+		}
+		menu.showAtMouseEvent(event);
+	}
+
+	private setCanvasChildRelationship(targetPath: string, isChild: boolean): void {
+		if (!this.file) return;
+		this.plugin.store.addCanvasReference(this.file.path, targetPath);
+		const changed = isChild
+			? this.plugin.store.clearParentKnowledgeCanvas(targetPath, this.file.path)
+			: this.plugin.store.setParentKnowledgeCanvas(targetPath, this.file.path);
+		new Notice(changed
+			? isChild ? '已取消子画布关系，引用关系仍然保留。' : '已设为当前画布的子画布。'
+			: '无法修改画布父子关系。');
+	}
+
+	private async setFolderChildRelationship(folderPath: string, childPath: string | null): Promise<void> {
+		if (!this.file) return;
+		if (childPath) {
+			this.plugin.store.addCanvasReference(this.file.path, childPath);
+			const changed = this.plugin.store.clearParentKnowledgeCanvas(childPath, this.file.path);
+			new Notice(changed ? '已取消子画布关系，引用关系仍然保留。' : '无法修改画布父子关系。');
+			return;
+		}
+		const createdPath = await this.plugin.createGlobeCanvas(folderPath, this.file.path);
+		if (!createdPath) return;
+		this.plugin.store.addCanvasReference(this.file.path, createdPath);
+		new Notice('已设为当前画布的子画布。');
+	}
+
+	private addNodeAppearanceControls(menu: Menu, node: GlobeCanvasNode, anchorEvent: MouseEvent): void {
+		const appearance = mergeKnowledgeCanvasNodeAppearance(node.appearance);
+		menu.addSeparator();
+		menu.addItem((item) => item
+			.setTitle('颜色')
+			.setIcon('palette')
+			.setIsLabel(true)
+			.setSection('knowledge-map-style'));
+		for (const option of GLOBE_NODE_PALETTES) {
+			menu.addItem((item) => item
+				.setTitle(this.createNodeStyleOption('color', option.id, option.label, appearance.palette === option.id))
+				.setSection('knowledge-map-style')
+				.onClick(() => this.applyNodeAppearance(node.id, { palette: option.id, customColor: undefined })));
+		}
+		const usesMore = appearance.palette === 'custom'
+			|| GLOBE_NODE_EXTENDED_PALETTES.some((option) => option.id === appearance.palette);
+		menu.addItem((item) => item
+			.setTitle(this.createNodeStyleOption('color', 'more', '更多颜色', usesMore))
+			.setSection('knowledge-map-style')
+			.onClick(() => this.showExpandedNodePalette(node, anchorEvent)));
+		menu.addItem((item) => item
+			.setTitle('形状')
+			.setIcon('shapes')
+			.setIsLabel(true)
+			.setSection('knowledge-map-style'));
+		for (const option of GLOBE_NODE_SHAPES) {
+			menu.addItem((item) => item
+				.setTitle(this.createNodeStyleOption('shape', option.id, option.label, appearance.shape === option.id))
+				.setSection('knowledge-map-style')
+				.onClick(() => this.applyNodeAppearance(node.id, { shape: option.id })));
+		}
+		menu.addItem((item) => item
+			.setTitle('选择图标…')
+			.setIcon('smile-plus')
+			.setSection('knowledge-map-icon-picker')
+			.onClick(() => new ManagedNodeIconDialog(this.app, appearance.icon, (icon) => {
+				this.applyNodeAppearance(node.id, { icon });
+			}).open()));
+	}
+
+	private showExpandedNodePalette(node: GlobeCanvasNode, anchorEvent: MouseEvent): void {
+		window.setTimeout(() => {
+			const current = this.document.nodes.find((candidate) => candidate.id === node.id);
+			if (!current) return;
+			const appearance = mergeKnowledgeCanvasNodeAppearance(current.appearance);
+			const menu = Menu.forEvent(anchorEvent).setUseNativeMenu(false);
+			menu.addItem((item) => item
+				.setTitle('更多颜色')
+				.setIcon('palette')
+				.setIsLabel(true)
+				.setSection('knowledge-map-style-more-header'));
+			const customColors = this.plugin.store.getCustomNodeColors();
+			if (customColors.length > 0) {
+				menu.addItem((item) => item
+					.setTitle('我的颜色')
+					.setIcon('bookmark')
+					.setIsLabel(true)
+					.setSection('knowledge-map-style-more'));
+				for (const color of customColors) {
+					menu.addItem((item) => item
+						.setTitle(this.createCustomColorOption(color, appearance.palette === 'custom' && appearance.customColor === color, menu))
+						.setSection('knowledge-map-style-more')
+						.onClick(() => this.applyNodeAppearance(node.id, { palette: 'custom', customColor: color })));
+				}
+			}
+			menu.addItem((item) => item
+				.setTitle('预设颜色')
+				.setIcon('swatch-book')
+				.setIsLabel(true)
+				.setSection('knowledge-map-style-more'));
+			for (const option of GLOBE_NODE_EXTENDED_PALETTES) {
+				menu.addItem((item) => item
+					.setTitle(this.createNodeStyleOption('color', option.id, option.label, appearance.palette === option.id))
+					.setSection('knowledge-map-style-more')
+					.onClick(() => this.applyNodeAppearance(node.id, { palette: option.id, customColor: undefined })));
+			}
+			menu.addItem((item) => item
+				.setTitle('自定义')
+				.setIcon('pipette')
+				.setIsLabel(true)
+				.setSection('knowledge-map-style-more'));
+			menu.addItem((item) => item
+				.setTitle(this.createNodeStyleOption('color', 'picker', '打开色盘', false))
+				.setSection('knowledge-map-style-more')
+				.onClick(() => this.openCustomNodeColorPicker(node.id)));
+			menu.showAtMouseEvent(anchorEvent);
+		}, 0);
+	}
+
+	private applyNodeAppearance(nodeId: string, patch: Partial<KnowledgeCanvasNodeAppearance>): void {
+		const node = this.document.nodes.find((candidate) => candidate.id === nodeId);
+		if (!node) return;
+		const appearance = mergeKnowledgeCanvasNodeAppearance(node.appearance, patch);
+		this.document = setGlobeCanvasNodeAppearance(this.document, nodeId, appearance);
+		this.renderer?.updateNodeAppearance(nodeId, appearance);
+		this.queueDocumentSave();
+	}
+
+	private openCustomNodeColorPicker(nodeId: string): void {
+		const node = this.document.nodes.find((candidate) => candidate.id === nodeId);
+		if (!node) return;
+		const appearance = mergeKnowledgeCanvasNodeAppearance(node.appearance);
+		new CustomNodeColorDialog(this.app, appearance.customColor ?? '#4b82b5', (color) => {
+			this.plugin.store.addCustomNodeColor(color);
+			this.applyNodeAppearance(nodeId, { palette: 'custom', customColor: color });
+		}).open();
+	}
+
+	private createNodeStyleOption(
+		kind: 'color' | 'shape',
+		value: KnowledgeCanvasNodePalette | KnowledgeCanvasNodeShape | 'more' | 'picker',
+		label: string,
+		active: boolean,
+	): DocumentFragment {
+		return createFragment((fragment) => {
+			const preview = fragment.createSpan({
+				cls: ['knowledge-map-style-preview', `is-${kind}`, `is-${value}`, active ? 'is-active' : ''].filter(Boolean).join(' '),
+			});
+			preview.setAttribute('aria-hidden', 'true');
+			fragment.createSpan({ cls: 'knowledge-map-style-option-label', text: label });
+		});
+	}
+
+	private createCustomColorOption(color: string, active: boolean, menu: Menu): DocumentFragment {
+		return createFragment((fragment) => {
+			const preview = fragment.createSpan({
+				cls: ['knowledge-map-style-preview', 'is-color', 'is-custom', active ? 'is-active' : ''].filter(Boolean).join(' '),
+			});
+			preview.style.setProperty('--knowledge-map-custom-color', color);
+			preview.setAttribute('aria-hidden', 'true');
+			preview.addEventListener('contextmenu', (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				this.plugin.store.removeCustomNodeColor(color);
+				menu.close();
+				new Notice('自定义颜色已删除。');
+			});
+			fragment.createSpan({ cls: 'knowledge-map-style-option-label', text: `${color}；右键删除` });
+		});
+	}
+
+	private async revealInFileNavigation(file: TAbstractFile): Promise<void> {
+		const leaf = this.app.workspace.getLeavesOfType('file-explorer')[0];
+		if (!leaf) {
+			new Notice('文件列表当前未打开。');
+			return;
+		}
+		await this.app.workspace.revealLeaf(leaf);
+		const view = leaf.view as unknown as { revealInFolder?: (target: TAbstractFile) => Promise<void> | void };
+		await view.revealInFolder?.(file);
+	}
+
+	private async copyVaultPath(path: string): Promise<void> {
+		try {
+			await navigator.clipboard.writeText(path);
+			new Notice('路径已复制。');
+		} catch {
+			new Notice('无法复制路径。');
+		}
 	}
 
 	private collectDroppedItems(transfer: DataTransfer | null): TAbstractFile[] {
