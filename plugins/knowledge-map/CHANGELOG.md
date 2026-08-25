@@ -52,6 +52,13 @@ This GitHub checkpoint freezes the version accepted in Obsidian before the conte
 - Recognized the generated current-folder node separately and prevented the current canvas from becoming its own child.
 - Preserved Excalidraw's native context menu for ordinary shapes and blank canvas areas.
 
+## Stage 3A accepted checkpoint - 2026-08-25
+
+- Restyled Excalidraw's native context menu as a compact, flat Obsidian-style panel.
+- Reduced menu width and row height while refining borders, shadows, separators, hover states, shortcuts, and the scrollbar.
+- Removed the previous gradient surface, accent side bars, and pill-shaped shortcut labels.
+- Shortened verbose Simplified Chinese action labels and removed mixed Chinese/English wording without changing menu commands or ordering.
+
 ## 0.1.0 - Unreleased
 
 ### Added

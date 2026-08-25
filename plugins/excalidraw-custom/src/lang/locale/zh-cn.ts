@@ -90,9 +90,9 @@ export default {
   DELETE_IMAGE_NOTICE: "请选择一个图像或嵌入的 Markdown 文档",
   MARKER_FRAME_SHOW: "显示标记画框",
   MARKER_FRAME_TITLE_SHOW: "显示标记画框名称",
-  COPY_ELEMENT_LINK: "复制所选元素的 [[file#^id]] 链接",
+  COPY_ELEMENT_LINK: "复制元素链接",
   FRAME_WITH_NAME: "按名称复制画框链接",
-  COPY_DRAWING_LINK: "复制绘图的 ![[drawing]] 链接",
+  COPY_DRAWING_LINK: "复制画布链接",
   INSERT_LINK_TO_ELEMENT: `单击=复制所选元素的 [[file#^id]] 链接\n${labelCTRL()}=复制元素所在分组为 [[file#^group=id]] 链接\n${labelSHIFT()}=复制所选元素所在区域为 [[file#^area=id]] 链接`,
   INSERT_LINK_TO_ELEMENT_GROUP:
     "复制所选元素所在分组为 ![[file#^group=id]] 链接",
@@ -109,7 +109,7 @@ export default {
   IMPORT_SVG: "导入 SVG 文件为线条（暂不支持文本元素）",
   IMPORT_SVG_CONTEXTMENU: "转换 SVG 为线条 - 有限制",
   INSERT_MD: "以图像形式嵌入 Markdown 文档到当前绘图中",
-  INSERT_MARKDOWN_IMAGE: "插入可编辑的 Markdown 图像",
+  INSERT_MARKDOWN_IMAGE: "插入 Markdown 图像",
   EDIT_MARKDOWN_IMAGE: "编辑 Markdown 图像",
   MARKDOWN_IMAGE_SELECT_ERROR: "请选择一个 Markdown 图像后重试",
   MARKDOWN_IMAGE_TITLE: "Markdown 图像",
@@ -191,11 +191,11 @@ export default {
   MARKDOWN_IMAGE_DELETE_TEXT: "删除 Markdown 文本",
   INSERT_PDF: "以图像形式嵌入 PDF 到当前绘图中",
   INSERT_LAST_ACTIVE_PDF_PAGE_AS_IMAGE: "以图像形式嵌入最后激活的 PDF 页面",
-  UNIVERSAL_ADD_FILE: "嵌入文件 / Insert ANY file",
+  UNIVERSAL_ADD_FILE: "嵌入文件",
   // Compatibility keys consumed by upstream Excalidraw via ExcalidrawPlugin.getLabel().
   // Keep this group in sync across maintained locales.
   ABOUT_LIBRARIES: "如何加载素材库",
-  INSERT_CARD: "插入“背景笔记”卡片",
+  INSERT_CARD: "插入背景笔记卡片",
   COMP_IMG: "图片 & 文件",
   COMP_IMG_FROM_SYSTEM: "从系统导入",
   COMP_IMG_ANY_FILE: "仓库中任意文件",
@@ -204,10 +204,10 @@ export default {
   COMP_FRAME_HINT:
     "切换标记画框。标记画框仅用于引导，用于定义幻灯片/打印区域/[[file#^frame=id]]，" +
     "导出时会隐藏；也不会包含元素。通过上下文菜单显示/隐藏标记画框。",
-  CONVERT_CARD_TO_FILE: "将“背景笔记”卡片保存到文件",
+  CONVERT_CARD_TO_FILE: "背景卡片转文件",
   ERROR_TRY_AGAIN: "请重试。",
   PASTE_CODEBLOCK: "粘贴代码块",
-  INVERT_IMAGES_IN_DARK_MODE: "深色主题下反转颜色",
+  INVERT_IMAGES_IN_DARK_MODE: "深色模式反色",
   INSERT_LATEX: `插入 LaTeX 公式到当前绘图中`,
   ENTER_LATEX: "输入 LaTeX 公式",
   EDIT_LATEX: "编辑 LaTeX 公式",
@@ -309,9 +309,9 @@ export default {
   USE_INSERT_FILE_MODAL: "使用“嵌入文件”功能来嵌入 Markdown 文档",
   RECURSIVE_INSERT_ERROR:
     "不能将图像的一部分嵌入到此图像中，因为这可能导致无限循环。",
-  CONVERT_TO_MARKDOWN: "转存为 Markdown 文档（并嵌入当前绘图）",
-  SELECT_TEXTELEMENT_ONLY: "只选择文本元素（非容器）",
-  REMOVE_LINK: "移除文字元素链接",
+  CONVERT_TO_MARKDOWN: "转为 Markdown",
+  SELECT_TEXTELEMENT_ONLY: "仅选择文本",
+  REMOVE_LINK: "移除链接",
   WELCOME_RANK_NEXT: "张绘图之后，到达下一等级！",
   WELCOME_RANK_LEGENDARY: "您已是绘图大师，续写传奇吧！",
   WELCOME_COMMAND_PALETTE: '在命令面板中输入 "Excalidraw"',
@@ -1300,7 +1300,7 @@ export default {
   TOGGLE_DISABLEBINDING: "开启或关闭绑定",
   TOGGLE_FRAME_RENDERING: "开启或关闭画框渲染",
   TOGGLE_FRAME_CLIPPING: "开启或关闭画框裁切",
-  OPEN_LINK_CLICK: "打开所选元素里的链接",
+  OPEN_LINK_CLICK: "打开链接",
   OPEN_LINK_PROPS: "打开图像链接或 LaTeX 公式编辑器",
 
   //IFrameActionsMenu.tsx

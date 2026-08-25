@@ -8,58 +8,60 @@
 
   .context-menu.excalidraw-context-menu {
     --context-menu-accent: var(--color-primary);
-    --context-menu-accent-soft: color-mix(
-      in srgb,
-      var(--context-menu-accent) 11%,
+    --context-menu-surface: var(
+      --background-primary,
       var(--popup-secondary-bg-color)
+    );
+    --context-menu-hover: var(
+      --background-modifier-hover,
+      color-mix(in srgb, var(--context-menu-accent) 9%, var(--context-menu-surface))
+    );
+    --context-menu-border: var(
+      --background-modifier-border,
+      var(--button-gray-2)
     );
     --context-menu-check: #4f8f68;
     --context-menu-check-soft: color-mix(
       in srgb,
-      #79b38c 15%,
-      var(--popup-secondary-bg-color)
+      #79b38c 12%,
+      var(--context-menu-surface)
     );
 
     position: relative;
     box-sizing: border-box;
     width: max-content;
-    min-width: 260px;
-    max-width: min(360px, calc(100vw - 24px));
-    max-height: min(60vh, 500px);
+    min-width: 226px;
+    max-width: min(310px, calc(100vw - 24px));
+    max-height: min(62vh, 460px);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    border: 1px solid
-      color-mix(in srgb, var(--button-gray-2) 78%, var(--context-menu-accent));
-    border-radius: 12px;
-    box-shadow: 0 18px 42px color.adjust(#000, $alpha: -0.84),
-      0 4px 12px color.adjust(#000, $alpha: -0.91),
-      0 0 0 1px color-mix(in srgb, var(--context-menu-accent) 5%, transparent);
+    border: 1px solid var(--context-menu-border);
+    border-radius: var(--radius-l, 10px);
+    box-shadow: var(
+      --shadow-s,
+      0 10px 30px color.adjust(#000, $alpha: -0.82),
+      0 2px 8px color.adjust(#000, $alpha: -0.9)
+    );
     list-style: none;
     user-select: none;
     margin: 0;
-    padding: 7px;
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, #fff3d6 7%, var(--popup-secondary-bg-color)),
-        transparent 34%
-      ),
-      var(--popup-secondary-bg-color);
+    padding: 5px;
+    background: var(--context-menu-surface);
+    color: var(--text-normal, var(--popup-text-color));
+    font-family: var(--font-interface-theme, inherit);
     cursor: default;
 
     &::-webkit-scrollbar {
-      width: 8px;
+      width: 7px;
     }
 
     &::-webkit-scrollbar-thumb {
-      min-height: 32px;
+      min-height: 30px;
       border: 2px solid transparent;
       border-radius: 999px;
-      background: linear-gradient(
-        var(--context-menu-accent),
-        color-mix(in srgb, var(--context-menu-accent) 55%, var(--button-gray-2))
-      );
+      background: var(--scrollbar-thumb-bg, var(--text-faint));
       background-clip: padding-box;
     }
 
@@ -78,27 +80,23 @@
     > li > .context-menu-item {
       display: grid !important;
       width: 100% !important;
-      height: 32px !important;
-      min-height: 32px !important;
-      max-height: 32px !important;
+      height: 30px !important;
+      min-height: 30px !important;
+      max-height: 30px !important;
       margin: 0 !important;
-      padding: 5px 10px 5px 28px !important;
-      color: color-mix(
-        in srgb,
-        var(--popup-text-color) 94%,
-        #55463a
-      ) !important;
-      font-size: 13px !important;
-      line-height: 18px !important;
+      padding: 5px 9px 5px 26px !important;
+      color: var(--text-normal, var(--popup-text-color)) !important;
+      font-size: var(--font-ui-small, 13px) !important;
+      line-height: 16px !important;
     }
 
     > li + li {
-      margin-top: 1px !important;
+      margin-top: 0 !important;
     }
 
     body.is-mobile & {
       //zsviczian
-      width: min(360px, calc(100vw - 16px));
+      width: min(310px, calc(100vw - 16px));
       min-width: 0;
       max-height: min(70vh, 500px);
       padding: 6px;
@@ -118,19 +116,19 @@
     margin: 0;
     padding: 0.375rem 0.625rem 0.375rem 1.75rem;
     text-align: start;
-    border-radius: 6px;
+    border-radius: var(--radius-s, 5px);
     background-color: transparent;
     border: none;
     white-space: nowrap;
     font-family: inherit;
-    font-size: 13px;
+    font-size: var(--font-ui-small, 13px);
     font-weight: 400;
     line-height: 1.35;
     letter-spacing: normal;
     text-transform: none;
     box-shadow: none;
     cursor: default;
-    transition: background-color 100ms ease, box-shadow 100ms ease;
+    transition: background-color 80ms ease, color 80ms ease;
 
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -155,8 +153,6 @@
 
     &.checkmark {
       background-color: var(--context-menu-check-soft);
-      box-shadow: inset 3px 0 0
-        color-mix(in srgb, var(--context-menu-check) 72%, transparent);
     }
 
     &.dangerous {
@@ -176,13 +172,12 @@
     .context-menu-item__shortcut {
       justify-self: end;
       min-width: max-content;
-      padding: 2px 6px;
-      border: 1px solid
-        color-mix(in srgb, var(--button-gray-2) 72%, transparent);
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--button-gray-2) 34%, transparent);
-      color: inherit;
-      opacity: 0.62;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--text-muted, inherit);
+      opacity: 0.78;
       font-family: inherit;
       font-size: 10px;
       font-weight: 500;
@@ -192,15 +187,13 @@
   }
 
   .context-menu-item:hover {
-    background-color: var(--context-menu-accent-soft);
-    box-shadow: inset 3px 0 0
-      color-mix(in srgb, var(--context-menu-accent) 72%, transparent);
+    background-color: var(--context-menu-hover);
 
     &.dangerous {
       .context-menu-item__label {
-        color: var(--popup-bg-color);
+        color: var(--text-error, $color-red-7);
       }
-      background-color: $color-red-6;
+      background-color: color-mix(in srgb, $color-red-6 12%, var(--context-menu-surface));
     }
   }
 
@@ -230,12 +223,7 @@
   .context-menu-item-separator {
     border: none;
     height: 1px;
-    margin: 5px 10px;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      color-mix(in srgb, var(--button-gray-2) 84%, var(--context-menu-accent)),
-      transparent
-    );
+    margin: 4px 8px;
+    background: var(--context-menu-border);
   }
 }
