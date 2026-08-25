@@ -1,4 +1,4 @@
-import { App, Modal } from 'obsidian';
+import { App, Modal, setIcon } from 'obsidian';
 import { normalizeCustomNodeColor } from '../integrations/knowledge-canvas-model';
 
 export class CustomNodeColorDialog extends Modal {
@@ -14,21 +14,34 @@ export class CustomNodeColorDialog extends Modal {
 	}
 
 	onOpen(): void {
-		this.modalEl.addClass('knowledge-map-color-dialog');
-		this.titleEl.setText('自定义颜色');
+		this.modalEl.addClass('knowledge-map-design-dialog', 'knowledge-map-color-dialog');
+		this.titleEl.setText('创建自定义颜色');
 		this.contentEl.createEl('p', {
-			cls: 'knowledge-map-color-dialog__description',
-			text: '点击色块打开色盘，也可以直接输入十六进制颜色。',
+			cls: 'knowledge-map-design-dialog__description',
+			text: '从色盘中挑选颜色，保存后会加入“我的颜色”，可在其他节点上重复使用。',
 		});
 
-		const picker = this.contentEl.createEl('input', {
+		const colorCard = this.contentEl.createDiv({ cls: 'knowledge-map-color-dialog__card' });
+		const preview = colorCard.createSpan({ cls: 'knowledge-map-color-dialog__preview' });
+		const colorCardCopy = colorCard.createDiv({ cls: 'knowledge-map-color-dialog__card-copy' });
+		colorCardCopy.createEl('strong', { text: '当前颜色' });
+		const colorValue = colorCardCopy.createSpan();
+		const pickerButton = colorCard.createEl('label', {
+			cls: 'knowledge-map-color-dialog__picker-button',
+			attr: { title: '打开色盘' },
+		});
+		const pickerButtonIcon = pickerButton.createSpan();
+		setIcon(pickerButtonIcon, 'pipette');
+		pickerButton.createSpan({ text: '打开色盘' });
+		const picker = pickerButton.createEl('input', {
 			cls: 'knowledge-map-color-dialog__picker',
 			attr: { type: 'color', 'aria-label': '打开颜色选择器' },
 		});
 		picker.value = this.selectedColor;
 
 		const valueRow = this.contentEl.createDiv({ cls: 'knowledge-map-color-dialog__value-row' });
-		const preview = valueRow.createSpan({ cls: 'knowledge-map-color-dialog__preview' });
+		const valueLabel = valueRow.createEl('label');
+		valueLabel.createSpan({ text: '十六进制色值' });
 		const valueInput = valueRow.createEl('input', {
 			cls: 'knowledge-map-color-dialog__hex',
 			attr: {
@@ -38,9 +51,11 @@ export class CustomNodeColorDialog extends Modal {
 				'aria-label': '十六进制颜色',
 			},
 		});
+		valueLabel.appendChild(valueInput);
 		valueInput.value = this.selectedColor;
 		const syncPreview = (): void => {
 			preview.style.setProperty('--knowledge-map-dialog-color', this.selectedColor);
+			colorValue.setText(this.selectedColor.toUpperCase());
 		};
 		const syncFromPicker = (): void => {
 			this.selectedColor = picker.value.toLowerCase();
@@ -59,10 +74,16 @@ export class CustomNodeColorDialog extends Modal {
 		});
 		syncPreview();
 
-		const actions = this.contentEl.createDiv({ cls: 'knowledge-map-color-dialog__actions' });
-		const cancel = actions.createEl('button', { text: '取消' });
+		const actions = this.contentEl.createDiv({ cls: 'knowledge-map-design-dialog__actions' });
+		const cancel = actions.createEl('button', {
+			cls: 'knowledge-map-design-dialog__button is-secondary',
+			text: '取消',
+		});
 		cancel.addEventListener('click', () => this.close());
-		const confirm = actions.createEl('button', { cls: 'mod-cta', text: '确认' });
+		const confirm = actions.createEl('button', {
+			cls: 'knowledge-map-design-dialog__button is-primary',
+			text: '确定',
+		});
 		confirm.addEventListener('click', () => {
 			const color = normalizeCustomNodeColor(valueInput.value);
 			if (!color) {

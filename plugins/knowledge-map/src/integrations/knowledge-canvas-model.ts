@@ -30,11 +30,18 @@ export type KnowledgeCanvasNodePalette =
 	| 'violet'
 	| 'yellow';
 export type KnowledgeCanvasNodeShape = 'diamond' | 'ellipse' | 'rectangle' | 'rounded';
+export type KnowledgeCanvasNodeIconKind = 'auto' | 'emoji' | 'lucide' | 'none' | 'symbol' | 'text';
+
+export interface KnowledgeCanvasNodeIcon {
+	kind: KnowledgeCanvasNodeIconKind;
+	value?: string;
+}
 
 export interface KnowledgeCanvasNodeAppearance {
 	palette: KnowledgeCanvasNodePalette;
 	shape: KnowledgeCanvasNodeShape;
 	customColor?: string;
+	icon: KnowledgeCanvasNodeIcon;
 }
 
 export interface KnowledgeCanvasElementData {
@@ -44,6 +51,7 @@ export interface KnowledgeCanvasElementData {
 	action?: KnowledgeCanvasAction;
 	canvasType?: KnowledgeCanvasType;
 	edgeKind?: MapEdge['kind'];
+	iconVersion?: number;
 	latex?: string;
 	nodeKind?: MapNodeKind;
 	part?: KnowledgeCanvasElementPart;
@@ -62,6 +70,7 @@ export type KnowledgeCanvasContextTarget = 'canvas' | 'file' | 'folder' | 'nativ
 export const DEFAULT_KNOWLEDGE_CANVAS_NODE_APPEARANCE: KnowledgeCanvasNodeAppearance = {
 	palette: 'default',
 	shape: 'ellipse',
+	icon: { kind: 'auto' },
 };
 
 export function mergeKnowledgeCanvasNodeAppearance(

@@ -1,5 +1,6 @@
 import {
 	App,
+	getIcon,
 	Menu,
 	Notice,
 	setIcon,
@@ -31,10 +32,12 @@ import {
 	type KnowledgeCanvasAction,
 	type KnowledgeCanvasElementData,
 	type KnowledgeCanvasNodeAppearance,
+	type KnowledgeCanvasNodeIcon,
 	type KnowledgeCanvasNodePalette,
 	type KnowledgeCanvasNodeShape,
 } from './knowledge-canvas-model';
 import { CustomNodeColorDialog } from '../ui/custom-node-color-dialog';
+import { ManagedNodeIconDialog } from '../ui/managed-node-icon-dialog';
 
 const EXCALIDRAW_VIEW_TYPE = 'excalidraw';
 const NODE_SCALE = 1.35;
@@ -354,7 +357,7 @@ export class ExcalidrawIntegration {
 		const positions = createInitialPositions(graph, this.store.getMapState(normalizedPath)?.nodes ?? {});
 
 		ea.reset();
-		this.addFolderMapToWorkbench(ea, graph, positions, Boolean(parentCanvasPath));
+		await this.addFolderMapToWorkbench(ea, graph, positions, Boolean(parentCanvasPath));
 		const filePath = await ea.create({
 			filename: drawingName(`${folderDisplayName(normalizedPath)} 2维画布`),
 			foldername: normalizedPath === ROOT_PATH ? undefined : normalizedPath,
@@ -479,7 +482,8 @@ export class ExcalidrawIntegration {
 		// Do not inject the legacy whole-element B button because it duplicates
 		// the native control and competes for the textarea selection.
 		removeTextControls = (): void => undefined;
-		void this.polishManagedElements(file, ea);
+		void this.upgradeManagedCanvasIcons(view, ea)
+			.then(() => this.polishManagedElements(file, ea));
 		return true;
 	}
 
@@ -654,7 +658,7 @@ export class ExcalidrawIntegration {
 			} else if (targetType === 'folder') {
 				this.showFolderNodeMenu(currentFile, view, ea, data, event);
 			} else if (targetFile instanceof TFile) {
-				this.showFileNodeMenu(currentFile, targetFile, event);
+				this.showFileNodeMenu(currentFile, targetFile, view, ea, data, event);
 			}
 		};
 		container.addEventListener('pointerdown', onPointerDown, true);
@@ -1475,7 +1479,7 @@ export class ExcalidrawIntegration {
 			const positions = createInitialPositions(graph, { ...sharedPositions, ...canvasPositions });
 			ea.reset();
 			const state = this.store.getKnowledgeCanvas(file.path);
-			this.addFolderMapToWorkbench(
+			await this.addFolderMapToWorkbench(
 				ea,
 				graph,
 				positions,
@@ -1525,13 +1529,13 @@ export class ExcalidrawIntegration {
 		}
 	}
 
-	private addFolderMapToWorkbench(
+	private async addFolderMapToWorkbench(
 		ea: ExcalidrawAutomateLike,
 		graph: FolderGraph,
 		positions: Record<string, SavedNodePosition>,
 		canGoBack: boolean,
 		appearances: ReadonlyMap<string, KnowledgeCanvasNodeAppearance> = new Map(),
-	): void {
+	): Promise<void> {
 		this.addHeader(ea, graph.folderPath);
 		this.addNavigation(ea, canGoBack);
 		const elementIds = new Map<string, string>();
@@ -1539,7 +1543,7 @@ export class ExcalidrawIntegration {
 		for (const node of graph.nodes) {
 			const point = positions[node.id];
 			if (!point) continue;
-			const nodeIds = this.addNode(
+			const nodeIds = await this.addNode(
 				ea,
 				node,
 				point.x * NODE_SCALE,
@@ -1589,14 +1593,14 @@ export class ExcalidrawIntegration {
 		ea.addToGroup?.([shapeId, textId]);
 	}
 
-	private addNode(
+	private async addNode(
 		ea: ExcalidrawAutomateLike,
 		node: MapNode,
 		centerX: number,
 		centerY: number,
 		scope: KnowledgeCanvasElementData['scope'],
 		appearance = mergeKnowledgeCanvasNodeAppearance(undefined),
-	): { shapeId: string; textId: string } {
+	): Promise<{ shapeId: string; textId: string }> {
 		const isFolder = node.kind === 'folder' || node.kind === 'current-folder';
 		const size = isFolder ? FOLDER_SIZE : NOTE_SIZE;
 		const x = centerX - size / 2;
@@ -1621,9 +1625,28 @@ export class ExcalidrawIntegration {
 			appearance,
 		});
 		this.tag(ea, shapeId, data);
+		const ids = [shapeId];
+		const hasCustomIcon = appearance.icon.kind !== 'auto' && appearance.icon.kind !== 'none';
+		await this.addManagedFileNodeIcon(
+			ea,
+			appearance.icon,
+			x,
+			y,
+			size,
+			centerX,
+			colors.stroke,
+			elementData(scope, 'node', {
+				nodeKind: node.kind,
+				path: node.path,
+				action: node.kind === 'folder' ? 'folder' : undefined,
+				part: 'icon',
+				appearance,
+			}),
+			ids,
+		);
 
 		this.setTextStyle(ea, colors.text, isFolder ? 17 : 15);
-		const textId = ea.addText(x, y + size / 2 - 11, node.label, {
+		const textId = ea.addText(x, hasCustomIcon ? y + size - 31 : y + size / 2 - 11, node.label, {
 			width: size,
 			textAlign: 'center',
 			autoResize: false,
@@ -1635,8 +1658,50 @@ export class ExcalidrawIntegration {
 			part: 'label',
 			appearance,
 		}));
-		ea.addToGroup?.([shapeId, textId]);
+		ids.push(textId);
+		ea.addToGroup?.(ids);
 		return { shapeId, textId };
+	}
+
+	private async addManagedFileNodeIcon(
+		ea: ExcalidrawAutomateLike,
+		icon: KnowledgeCanvasNodeIcon,
+		x: number,
+		y: number,
+		size: number,
+		centerX: number,
+		color: string,
+		iconData: Record<string, unknown>,
+		ids: string[],
+	): Promise<void> {
+		if (icon.kind === 'auto' || icon.kind === 'none') return;
+		const value = icon.value?.trim();
+		if (!value) return;
+		if (icon.kind === 'lucide') {
+			if (!ea.addImage) return;
+			const imageFile = this.renderLucideIconDataUrl(value, color, 34);
+			if (!imageFile) return;
+			const iconId = await ea.addImage({
+				topX: centerX - 17,
+				topY: y + Math.max(13, size * 0.18),
+				imageFile,
+				scale: false,
+				anchor: false,
+			});
+			if (iconId) {
+				this.tag(ea, iconId, iconData);
+				ids.push(iconId);
+			}
+			return;
+		}
+		this.setTextStyle(ea, color, icon.kind === 'emoji' ? 25 : icon.kind === 'symbol' ? 28 : 23);
+		const iconId = ea.addText(centerX - size / 2, y + Math.max(9, size * 0.12), value, {
+			width: size,
+			textAlign: 'center',
+			autoResize: false,
+		});
+		this.tag(ea, iconId, iconData);
+		ids.push(iconId);
 	}
 
 	private addEdge(
@@ -1832,7 +1897,7 @@ export class ExcalidrawIntegration {
 		const canvasPaths: string[] = [];
 		let createdElementGroups = 0;
 		let attemptedSelfDrop = false;
-		items.forEach((item, index) => {
+		for (const [index, item] of items.entries()) {
 			const canvasState = item instanceof TFile ? this.store.getKnowledgeCanvas(item.path) : undefined;
 			const column = index % 4;
 			const row = Math.floor(index / 4);
@@ -1841,14 +1906,14 @@ export class ExcalidrawIntegration {
 			if (canvasState && item instanceof TFile) {
 				if (item.path === parentFile.path) {
 					attemptedSelfDrop = true;
-					return;
+					continue;
 				}
 				if (!existingCanvasTargets.has(item.path)) {
-					this.addManagedCanvasNode(ea, item, canvasState.canvasType, centerX, centerY);
+					await this.addManagedCanvasNode(ea, item, canvasState.canvasType, centerX, centerY);
 					createdElementGroups += 1;
 				}
 				canvasPaths.push(item.path);
-				return;
+				continue;
 			}
 			const isFolder = item instanceof TFolder;
 			const label = item instanceof TFile ? item.basename : item.name;
@@ -1858,9 +1923,9 @@ export class ExcalidrawIntegration {
 				path: item.path,
 				label,
 			};
-			this.addNode(ea, node, centerX, centerY, 'manual');
+			await this.addNode(ea, node, centerX, centerY, 'manual');
 			createdElementGroups += 1;
-		});
+		}
 		const added = createdElementGroups > 0
 			? await ea.addElementsToView?.(false, true, true)
 			: true;
@@ -1899,57 +1964,43 @@ export class ExcalidrawIntegration {
 		}
 	}
 
-	private addManagedCanvasNode(
+	private async addManagedCanvasNode(
 		ea: ExcalidrawAutomateLike,
 		file: TFile,
 		canvasType: '2d' | '3d',
 		centerX: number,
 		centerY: number,
-	): void {
+		appearance = mergeKnowledgeCanvasNodeAppearance(undefined),
+	): Promise<void> {
 		const size = 92;
 		const x = centerX - size / 2;
 		const y = centerY - size / 2;
-		const appearance = mergeKnowledgeCanvasNodeAppearance(undefined);
+		const colors = this.managedNodeColors({ canvasType }, appearance);
 		const bodyData = elementData('manual', 'node', {
 			canvasType,
 			path: file.path,
 			part: 'body',
 			appearance,
+			iconVersion: 2,
 		});
 		const iconData = elementData('manual', 'node', {
 			canvasType,
 			path: file.path,
 			part: 'icon',
 			appearance,
+			iconVersion: 2,
 		});
 		const ids: string[] = [];
-		const stroke = canvasType === '3d' ? '#4b8fc9' : '#7860a8';
-		const background = canvasType === '3d' ? '#e8f4ff' : '#f1edfb';
-		const textColor = canvasType === '3d' ? '#244b68' : '#43345f';
-		this.setShapeStyle(ea, stroke, background, 2.2, 0);
+		this.setShapeStyle(ea, colors.stroke, colors.background, 2.2, 0);
 		const bodyId = ea.addEllipse(x, y, size, size);
+		const body = ea.getElement(bodyId);
+		if (body) this.applyManagedNodeShape(body, appearance.shape);
 		this.tag(ea, bodyId, bodyData);
 		ids.push(bodyId);
 
-		this.setShapeStyle(ea, stroke, 'transparent', 1.6, 0);
-		const iconIds = canvasType === '3d'
-			? [
-				ea.addEllipse(x + 27, y + 11, 38, 70),
-				ea.addEllipse(x + 11, y + 30, 70, 32),
-			]
-			: [
-				ea.addEllipse(x + 39, y + 17, 14, 14),
-				ea.addEllipse(x + 20, y + 59, 14, 14),
-				ea.addEllipse(x + 58, y + 59, 14, 14),
-				ea.addArrow([[centerX, y + 31], [x + 27, y + 59]], { startArrowHead: null, endArrowHead: null }),
-				ea.addArrow([[centerX, y + 31], [x + 65, y + 59]], { startArrowHead: null, endArrowHead: null }),
-			];
-		for (const id of iconIds) {
-			this.tag(ea, id, iconData);
-			ids.push(id);
-		}
+		await this.addManagedCanvasIcon(ea, canvasType, appearance.icon, x, y, centerX, colors.stroke, iconData, ids);
 
-		this.setTextStyle(ea, textColor, 15);
+		this.setTextStyle(ea, colors.text, 15);
 		const textId = ea.addText(centerX - 90, y + size + 10, canvasDisplayName(file.path), {
 			width: 180,
 			textAlign: 'center',
@@ -1960,9 +2011,92 @@ export class ExcalidrawIntegration {
 			path: file.path,
 			part: 'label',
 			appearance,
+			iconVersion: 2,
 		}));
 		ids.push(textId);
 		ea.addToGroup?.(ids);
+	}
+
+	private async addManagedCanvasIcon(
+		ea: ExcalidrawAutomateLike,
+		canvasType: '2d' | '3d',
+		icon: KnowledgeCanvasNodeIcon,
+		x: number,
+		y: number,
+		centerX: number,
+		color: string,
+		iconData: Record<string, unknown>,
+		ids: string[],
+	): Promise<void> {
+		if (icon.kind === 'none') return;
+		if (icon.kind === 'lucide') {
+			const value = icon.value?.trim();
+			if (!value || !ea.addImage) return;
+			const imageFile = this.renderLucideIconDataUrl(value, color);
+			if (!imageFile) return;
+			const iconId = await ea.addImage({
+				topX: centerX - 24,
+				topY: y + 23,
+				imageFile,
+				scale: false,
+				anchor: false,
+			});
+			if (iconId) {
+				this.tag(ea, iconId, iconData);
+				ids.push(iconId);
+			}
+			return;
+		}
+		if (icon.kind !== 'auto') {
+			const value = icon.value?.trim();
+			if (!value) return;
+			this.setTextStyle(ea, color, icon.kind === 'emoji' ? 34 : icon.kind === 'symbol' ? 36 : 28);
+			const iconId = ea.addText(centerX - 36, y + 27, value, {
+				width: 72,
+				textAlign: 'center',
+				autoResize: false,
+			});
+			this.tag(ea, iconId, iconData);
+			ids.push(iconId);
+			return;
+		}
+
+		this.setShapeStyle(ea, color, 'transparent', 1.6, 0);
+		const iconIds = canvasType === '3d'
+			? [
+				ea.addEllipse(x + 33, y + 18, 26, 56),
+				ea.addEllipse(x + 18, y + 27, 56, 20),
+				ea.addEllipse(x + 18, y + 45, 56, 20),
+			]
+			: [
+				ea.addEllipse(x + 40, y + 18, 12, 12),
+				ea.addEllipse(x + 21, y + 61, 12, 12),
+				ea.addEllipse(x + 59, y + 61, 12, 12),
+				ea.addArrow([[centerX, y + 30], [centerX, y + 48]], { startArrowHead: null, endArrowHead: null }),
+				ea.addArrow([[x + 27, y + 48], [x + 65, y + 48]], { startArrowHead: null, endArrowHead: null }),
+				ea.addArrow([[x + 27, y + 48], [x + 27, y + 61]], { startArrowHead: null, endArrowHead: null }),
+				ea.addArrow([[x + 65, y + 48], [x + 65, y + 61]], { startArrowHead: null, endArrowHead: null }),
+			];
+		for (const id of iconIds) {
+			this.tag(ea, id, iconData);
+			ids.push(id);
+		}
+	}
+
+	private renderLucideIconDataUrl(iconId: string, color: string, size = 48): string | null {
+		const icon = getIcon(iconId);
+		if (!icon) return null;
+		icon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+		icon.setAttribute('width', String(size));
+		icon.setAttribute('height', String(size));
+		icon.setAttribute('stroke', color);
+		icon.setAttribute('color', color);
+		icon.setAttribute('fill', 'none');
+		icon.style.color = color;
+		for (const element of Array.from(icon.querySelectorAll<SVGElement>('*'))) {
+			if (element.getAttribute('stroke') === 'currentColor') element.setAttribute('stroke', color);
+		}
+		return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon.outerHTML)}`;
 	}
 
 	private async openManagedCanvasFile(
@@ -2139,7 +2273,14 @@ export class ExcalidrawIntegration {
 		new Notice(changed ? '已设为当前画布的子画布。' : '无法修改画布父子关系。');
 	}
 
-	private showFileNodeMenu(sourceFile: TFile, targetFile: TFile, event: MouseEvent): void {
+	private showFileNodeMenu(
+		sourceFile: TFile,
+		targetFile: TFile,
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		event: MouseEvent,
+	): void {
 		const menu = this.createManagedNodeMenu(event);
 		this.addManagedNodeMenuHeader(
 			menu,
@@ -2167,6 +2308,7 @@ export class ExcalidrawIntegration {
 			.setIcon('copy')
 			.setSection('knowledge-map-info')
 			.onClick(() => void this.copyVaultPath(targetFile.path)));
+		this.addManagedNodeAppearanceControls(menu, view, ea, data, event);
 		this.app.workspace.trigger('file-menu', menu, targetFile, 'knowledge-canvas');
 		menu.showAtMouseEvent(event);
 	}
@@ -2255,6 +2397,240 @@ export class ExcalidrawIntegration {
 					data,
 					{ shape: option.id },
 				)));
+		}
+		if (data.canvasType || data.nodeKind === 'folder' || data.nodeKind === 'note' || data.nodeKind === 'external-note') {
+			menu.addItem((item) => item
+				.setTitle('选择图标…')
+				.setIcon('smile-plus')
+				.setSection('knowledge-map-icon-picker')
+				.onClick(() => this.openManagedNodeIconDialog(view, ea, data)));
+		}
+	}
+
+	private openManagedNodeIconDialog(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+	): void {
+		const appearance = this.getManagedNodeAppearance(ea, data);
+		new ManagedNodeIconDialog(this.app, appearance.icon, (icon) => {
+			void this.replaceManagedNodeIcon(view, ea, data, icon);
+		}).open();
+	}
+
+	private async replaceManagedNodeIcon(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		icon: KnowledgeCanvasNodeIcon,
+	): Promise<void> {
+		if (data.canvasType) {
+			await this.replaceManagedCanvasNodeIcon(view, ea, data, icon);
+			return;
+		}
+		const appearance = mergeKnowledgeCanvasNodeAppearance(
+			this.getManagedNodeAppearance(ea, data),
+			{ icon },
+		);
+		await this.replaceManagedFileNode(
+			view,
+			ea,
+			data,
+			appearance,
+			'无法保存节点图标。',
+			'节点图标已更新。',
+		);
+	}
+
+	private async replaceManagedCanvasNodeIcon(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		icon: KnowledgeCanvasNodeIcon,
+	): Promise<void> {
+		const appearance = mergeKnowledgeCanvasNodeAppearance(
+			this.getManagedNodeAppearance(ea, data),
+			{ icon },
+		);
+		await this.replaceManagedCanvasNode(
+			view,
+			ea,
+			data,
+			appearance,
+			'无法保存节点图标。',
+			'节点图标已更新。',
+		);
+	}
+
+	private async replaceManagedCanvasNode(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		appearance: KnowledgeCanvasNodeAppearance,
+		failureMessage: string,
+		successMessage: string,
+	): Promise<void> {
+		if (!data.path || !data.canvasType || !ea.addElementsToView) return;
+		const file = this.app.vault.getAbstractFileByPath(data.path);
+		if (!(file instanceof TFile)) {
+			new Notice('找不到对应的画布。');
+			return;
+		}
+		const elements = this.findManagedNodeElements(ea, data);
+		const body = elements
+			.filter((element) => {
+				const elementData = readKnowledgeCanvasData(element);
+				return elementData?.part === 'body' || elementData?.role === 'node' && element.type !== 'arrow';
+			})
+			.sort((left, right) => (right.width ?? 0) * (right.height ?? 0) - (left.width ?? 0) * (left.height ?? 0))[0];
+		if (
+			!body
+			|| body.x === undefined
+			|| body.y === undefined
+			|| body.width === undefined
+			|| body.height === undefined
+		) {
+			new Notice('无法读取画布节点位置。');
+			return;
+		}
+		this.stylingViews.add(view);
+		try {
+			ea.deleteViewElements?.(elements);
+			ea.setView?.(view);
+			ea.reset();
+			await this.addManagedCanvasNode(
+				ea,
+				file,
+				data.canvasType,
+				body.x + body.width / 2,
+				body.y + body.height / 2,
+				appearance,
+			);
+			const added = await ea.addElementsToView(false, true, true);
+			new Notice(added === false ? failureMessage : successMessage);
+		} finally {
+			this.stylingViews.delete(view);
+		}
+	}
+
+	private async replaceManagedFileNode(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		appearance: KnowledgeCanvasNodeAppearance,
+		failureMessage: string,
+		successMessage: string,
+	): Promise<void> {
+		if (!data.path || !data.nodeKind || !ea.addElementsToView) return;
+		const target = this.app.vault.getAbstractFileByPath(data.path);
+		if (!(target instanceof TFile) && !(target instanceof TFolder)) {
+			new Notice('找不到对应的文件或文件夹。');
+			return;
+		}
+		const elements = this.findManagedNodeElements(ea, data);
+		const body = elements
+			.filter((element) => readKnowledgeCanvasData(element)?.role === 'node' && element.type !== 'arrow')
+			.sort((left, right) => (right.width ?? 0) * (right.height ?? 0) - (left.width ?? 0) * (left.height ?? 0))[0];
+		if (
+			!body
+			|| body.x === undefined
+			|| body.y === undefined
+			|| body.width === undefined
+			|| body.height === undefined
+		) {
+			new Notice('无法读取节点位置。');
+			return;
+		}
+		const node: MapNode = {
+			id: `${data.nodeKind}:${data.path}`,
+			kind: data.nodeKind,
+			path: data.path,
+			label: target instanceof TFile ? target.basename : target.name,
+		};
+		this.stylingViews.add(view);
+		try {
+			ea.deleteViewElements?.(elements);
+			ea.setView?.(view);
+			ea.reset();
+			await this.addNode(
+				ea,
+				node,
+				body.x + body.width / 2,
+				body.y + body.height / 2,
+				data.scope,
+				appearance,
+			);
+			const added = await ea.addElementsToView(false, true, true);
+			new Notice(added === false ? failureMessage : successMessage);
+		} finally {
+			this.stylingViews.delete(view);
+		}
+	}
+
+	private async upgradeManagedCanvasIcons(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+	): Promise<void> {
+		if (!ea.getViewElements || !ea.addElementsToView) return;
+		const elements = ea.getViewElements();
+		const legacyTargets = new Map<string, KnowledgeCanvasElementData>();
+		for (const element of elements) {
+			const data = readKnowledgeCanvasData(element);
+			if (!data?.canvasType || !data.path || data.iconVersion === 2 || element.isDeleted) continue;
+			legacyTargets.set(`${data.canvasType}:${data.path}`, data);
+		}
+		if (legacyTargets.size === 0) return;
+
+		const replacements: {
+			appearance: KnowledgeCanvasNodeAppearance;
+			canvasType: '2d' | '3d';
+			centerX: number;
+			centerY: number;
+			elements: ExcalidrawElementLike[];
+			file: TFile;
+		}[] = [];
+		for (const data of legacyTargets.values()) {
+			const file = this.app.vault.getAbstractFileByPath(data.path!);
+			if (!(file instanceof TFile) || !data.canvasType) continue;
+			const group = this.findManagedNodeElements(ea, data);
+			const body = group
+				.filter((element) => readKnowledgeCanvasData(element)?.role === 'node' && element.type !== 'arrow')
+				.sort((left, right) => (right.width ?? 0) * (right.height ?? 0) - (left.width ?? 0) * (left.height ?? 0))[0];
+			if (
+				!body
+				|| body.x === undefined
+				|| body.y === undefined
+				|| body.width === undefined
+				|| body.height === undefined
+			) continue;
+			replacements.push({
+				appearance: this.getManagedNodeAppearance(ea, data),
+				canvasType: data.canvasType,
+				centerX: body.x + body.width / 2,
+				centerY: body.y + body.height / 2,
+				elements: group,
+				file,
+			});
+		}
+		if (replacements.length === 0) return;
+		this.stylingViews.add(view);
+		try {
+			ea.deleteViewElements?.(replacements.flatMap((replacement) => replacement.elements));
+			ea.setView?.(view);
+			ea.reset();
+			for (const replacement of replacements) {
+				await this.addManagedCanvasNode(
+					ea,
+					replacement.file,
+					replacement.canvasType,
+					replacement.centerX,
+					replacement.centerY,
+					replacement.appearance,
+				);
+			}
+			await ea.addElementsToView(false, true, true);
+		} finally {
+			this.stylingViews.delete(view);
 		}
 	}
 
@@ -2456,6 +2832,28 @@ export class ExcalidrawIntegration {
 			this.getManagedNodeAppearance(ea, target),
 			patch,
 		);
+		if (target.canvasType && appearance.icon.kind === 'lucide' && patch.palette !== undefined) {
+			await this.replaceManagedCanvasNode(
+				view,
+				ea,
+				target,
+				appearance,
+				'无法保存节点颜色。',
+				'节点颜色已更新。',
+			);
+			return;
+		}
+		if (target.nodeKind && appearance.icon.kind === 'lucide' && patch.palette !== undefined) {
+			await this.replaceManagedFileNode(
+				view,
+				ea,
+				target,
+				appearance,
+				'无法保存节点颜色。',
+				'节点颜色已更新。',
+			);
+			return;
+		}
 		const nodeElements = elements.filter((element) => readKnowledgeCanvasData(element)?.role === 'node');
 		const bodyId = nodeElements
 			.filter((element) => element.type !== 'arrow')

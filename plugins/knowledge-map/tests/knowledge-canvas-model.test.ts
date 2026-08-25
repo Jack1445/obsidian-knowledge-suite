@@ -58,6 +58,7 @@ describe('knowledge canvas metadata', () => {
 		expect(mergeKnowledgeCanvasNodeAppearance(undefined)).toEqual({
 			palette: 'default',
 			shape: 'ellipse',
+			icon: { kind: 'auto' },
 		});
 		expect(mergeKnowledgeCanvasNodeAppearance(
 			{ palette: 'teal' },
@@ -65,6 +66,7 @@ describe('knowledge canvas metadata', () => {
 		)).toEqual({
 			palette: 'teal',
 			shape: 'diamond',
+			icon: { kind: 'auto' },
 		});
 	});
 
@@ -76,6 +78,18 @@ describe('knowledge canvas metadata', () => {
 			background: '#dee7ef',
 			text: '#203f5f',
 		});
+	});
+
+	it('persists a selected library icon, emoji, or custom character in node appearance', () => {
+		expect(mergeKnowledgeCanvasNodeAppearance(undefined, {
+			icon: { kind: 'lucide', value: 'brain' },
+		}).icon).toEqual({ kind: 'lucide', value: 'brain' });
+		expect(mergeKnowledgeCanvasNodeAppearance(undefined, {
+			icon: { kind: 'emoji', value: '🧠' },
+		}).icon).toEqual({ kind: 'emoji', value: '🧠' });
+		expect(mergeKnowledgeCanvasNodeAppearance(undefined, {
+			icon: { kind: 'text', value: 'AI' },
+		}).icon).toEqual({ kind: 'text', value: 'AI' });
 	});
 
 	it('opens every folder as an independent child canvas', () => {

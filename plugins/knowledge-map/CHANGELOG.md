@@ -82,6 +82,15 @@ This GitHub checkpoint freezes the version accepted in Obsidian before the conte
 - Derived coordinated node backgrounds and readable text colors from custom colors while preserving the chosen accent.
 - Preserved node appearance across drawing reloads, Obsidian restarts, and generated folder-map refreshes.
 
+## Stage 4C accepted checkpoint - 2026-08-25
+
+- Added persistent icon controls to managed 2D canvases, 3D canvases, folders, and ordinary file nodes.
+- Integrated Obsidian's built-in Lucide library with full search and compact expandable featured results.
+- Added a curated expandable Emoji collection plus custom short-character icons.
+- Kept Lucide SVG icons synchronized with node colors and preserved them across map refreshes and reloads.
+- Unified the custom-color and icon dialogs with a compact card layout and simplified Confirm and Cancel actions.
+- Rebuilt managed folder and file nodes safely when their icon representation changes.
+
 ## 0.1.0 - Unreleased
 
 ### Added
