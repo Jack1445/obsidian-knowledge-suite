@@ -91,6 +91,14 @@ This GitHub checkpoint freezes the version accepted in Obsidian before the conte
 - Unified the custom-color and icon dialogs with a compact card layout and simplified Confirm and Cancel actions.
 - Rebuilt managed folder and file nodes safely when their icon representation changes.
 
+## Stage 5 accepted checkpoint - 2026-08-25
+
+- Completed source, version, license, and embedded-Core signature verification for the full suite.
+- Passed all 10 Excalidraw Core inline-style tests and all 55 Knowledge Map tests, plus TypeScript and ESLint checks.
+- Completed a clean production build of Excalidraw Core, Excalidraw Custom, and Knowledge Map.
+- Verified SHA-256 equality between all staged plugin artifacts and the files deployed to the acceptance Vault.
+- Produced the accepted `obsidian-knowledge-suite-v1.0.0.zip` release package.
+
 ## 0.1.0 - Unreleased
 
 ### Added
