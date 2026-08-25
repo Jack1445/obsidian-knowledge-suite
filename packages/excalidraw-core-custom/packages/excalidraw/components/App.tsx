@@ -14552,9 +14552,9 @@ class App extends React.Component<AppProps, AppState> {
       this.editorInterface.formFactor === "desktop"
         ? [
             CONTEXT_MENU_SEPARATOR,
+            actionSendToBack,
             actionSendBackward,
             actionBringForward,
-            actionSendToBack,
             actionBringToFront,
           ]
         : [];

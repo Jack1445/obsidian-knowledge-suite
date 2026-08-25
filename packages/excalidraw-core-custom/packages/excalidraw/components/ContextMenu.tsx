@@ -15,6 +15,14 @@ import type { ShortcutName } from "../actions/shortcuts";
 import type { Action } from "../actions/types";
 
 import type { TranslationKeys } from "../i18n";
+import { VISIBLE_LAYER_STEP } from "../actions/actionZindex";
+
+const Z_INDEX_ACTION_NAMES = new Set<Action["name"]>([
+  "sendToBack",
+  "sendBackward",
+  "bringForward",
+  "bringToFront",
+]);
 
 export type ContextMenuItem = typeof CONTEXT_MENU_SEPARATOR | Action;
 
@@ -53,6 +61,14 @@ export const ContextMenu = React.memo(
       return acc;
     }, []);
 
+    const getActionLabel = (item: Action) => {
+      const label =
+        typeof item.label === "function"
+          ? item.label(elements, appState, actionManager.app)
+          : item.label;
+      return t(label as unknown as TranslationKeys);
+    };
+
     return (
       <Popover
         onCloseRequest={() => {
@@ -85,19 +101,46 @@ export const ContextMenu = React.memo(
             }
 
             const actionName = item.name;
-            let label = "";
-            if (item.label) {
-              if (typeof item.label === "function") {
-                label = t(
-                  item.label(
-                    elements,
-                    appState,
-                    actionManager.app,
-                  ) as unknown as TranslationKeys,
-                );
-              } else {
-                label = t(item.label as unknown as TranslationKeys);
-              }
+            const label = getActionLabel(item);
+            if (Z_INDEX_ACTION_NAMES.has(actionName)) {
+              const shortcut = getShortcutFromShortcutName(
+                actionName as ShortcutName,
+              );
+              const icon =
+                typeof item.icon === "function"
+                  ? item.icon(appState, elements)
+                  : item.icon;
+              return (
+                <li
+                  key={idx}
+                  data-testid={actionName}
+                  className="context-menu-layer-action"
+                >
+                  <button
+                    type="button"
+                    className="context-menu-layer-action__button"
+                    aria-label={label}
+                    title={shortcut ? `${label} · ${shortcut}` : label}
+                    onClick={() => {
+                      onClose(() => {
+                        actionManager.executeAction(
+                          item,
+                          "contextMenu",
+                          actionName === "sendBackward" ||
+                            actionName === "bringForward"
+                            ? VISIBLE_LAYER_STEP
+                            : null,
+                        );
+                      });
+                    }}
+                  >
+                    {icon}
+                    <span className="context-menu-layer-action__label">
+                      {label}
+                    </span>
+                  </button>
+                </li>
+              );
             }
 
             return (

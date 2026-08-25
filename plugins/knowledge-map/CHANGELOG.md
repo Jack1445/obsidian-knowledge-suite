@@ -59,6 +59,13 @@ This GitHub checkpoint freezes the version accepted in Obsidian before the conte
 - Removed the previous gradient surface, accent side bars, and pill-shaped shortcut labels.
 - Shortened verbose Simplified Chinese action labels and removed mixed Chinese/English wording without changing menu commands or ordering.
 
+## Stage 3B accepted checkpoint - 2026-08-25
+
+- Combined the four z-index commands into one compact icon row ordered as send to back, move backward, move forward, and bring to front.
+- Added localized accessible labels and shortcut tooltips while keeping the icon row keyboard- and screen-reader-friendly.
+- Made context-menu move-backward and move-forward cross the nearest visually overlapping object instead of an unrelated off-screen scene element.
+- Excluded a node's bound text and attached connectors from visual-layer targets, while preserving Excalidraw's native keyboard and properties-panel ordering behavior.
+
 ## 0.1.0 - Unreleased
 
 ### Added
