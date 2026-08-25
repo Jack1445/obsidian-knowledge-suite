@@ -22,5 +22,10 @@ export function migrateData(raw: unknown): KnowledgeMapData {
 		),
 		canvasReferences: candidate.canvasReferences ?? {},
 		canvasOrder: candidate.canvasOrder ?? {},
+		customNodeColors: (candidate.customNodeColors ?? [])
+			.filter((color): color is string => typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color))
+			.map((color) => color.toLowerCase())
+			.filter((color, index, colors) => colors.indexOf(color) === index)
+			.slice(0, 12),
 	};
 }

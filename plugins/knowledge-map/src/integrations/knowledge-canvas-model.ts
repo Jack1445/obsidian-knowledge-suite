@@ -7,6 +7,35 @@ export const KNOWLEDGE_CANVAS_DATA_KEY = 'knowledgeMap';
 export type KnowledgeCanvasAction = 'folder' | 'back' | 'reset' | 'root';
 export type KnowledgeCanvasElementRole = 'edge' | 'formula' | 'header' | 'label' | 'navigation' | 'node';
 export type KnowledgeCanvasElementScope = 'manual' | 'map';
+export type KnowledgeCanvasElementPart = 'body' | 'icon' | 'label';
+export type KnowledgeCanvasNodePalette =
+	| 'amber'
+	| 'black'
+	| 'blue'
+	| 'brown'
+	| 'cyan'
+	| 'custom'
+	| 'default'
+	| 'gray'
+	| 'green'
+	| 'indigo'
+	| 'lime'
+	| 'magenta'
+	| 'orange'
+	| 'pink'
+	| 'purple'
+	| 'red'
+	| 'rose'
+	| 'teal'
+	| 'violet'
+	| 'yellow';
+export type KnowledgeCanvasNodeShape = 'diamond' | 'ellipse' | 'rectangle' | 'rounded';
+
+export interface KnowledgeCanvasNodeAppearance {
+	palette: KnowledgeCanvasNodePalette;
+	shape: KnowledgeCanvasNodeShape;
+	customColor?: string;
+}
 
 export interface KnowledgeCanvasElementData {
 	managed: true;
@@ -17,7 +46,9 @@ export interface KnowledgeCanvasElementData {
 	edgeKind?: MapEdge['kind'];
 	latex?: string;
 	nodeKind?: MapNodeKind;
+	part?: KnowledgeCanvasElementPart;
 	path?: string;
+	appearance?: KnowledgeCanvasNodeAppearance;
 }
 
 export interface KnowledgeCanvasLink {
@@ -27,6 +58,52 @@ export interface KnowledgeCanvasLink {
 
 export type KnowledgeCanvasFolderActivation = 'open-child-canvas';
 export type KnowledgeCanvasContextTarget = 'canvas' | 'file' | 'folder' | 'native';
+
+export const DEFAULT_KNOWLEDGE_CANVAS_NODE_APPEARANCE: KnowledgeCanvasNodeAppearance = {
+	palette: 'default',
+	shape: 'ellipse',
+};
+
+export function mergeKnowledgeCanvasNodeAppearance(
+	appearance: Partial<KnowledgeCanvasNodeAppearance> | null | undefined,
+	patch: Partial<KnowledgeCanvasNodeAppearance> = {},
+): KnowledgeCanvasNodeAppearance {
+	return {
+		...DEFAULT_KNOWLEDGE_CANVAS_NODE_APPEARANCE,
+		...appearance,
+		...patch,
+	};
+}
+
+export function normalizeCustomNodeColor(color: string): string | null {
+	const normalized = color.trim().toLowerCase();
+	return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+}
+
+export function createCustomNodeColorScheme(color: string): {
+	stroke: string;
+	background: string;
+	text: string;
+} | null {
+	const stroke = normalizeCustomNodeColor(color);
+	if (!stroke) return null;
+	const channels = [
+		Number.parseInt(stroke.slice(1, 3), 16),
+		Number.parseInt(stroke.slice(3, 5), 16),
+		Number.parseInt(stroke.slice(5, 7), 16),
+	] as const;
+	const mix = (target: number, amount: number): string => {
+		return `#${channels.map((channel) => {
+			return Math.round(channel + (target - channel) * amount).toString(16).padStart(2, '0');
+		}).join('')}`;
+	};
+	const luminance = (channels[0] * 299 + channels[1] * 587 + channels[2] * 114) / 255000;
+	return {
+		stroke,
+		background: mix(255, 0.84),
+		text: mix(0, luminance > 0.72 ? 0.58 : 0.38),
+	};
+}
 
 /**
  * Folder navigation always crosses a persisted parent/child canvas edge.

@@ -49,6 +49,28 @@ export class KnowledgeMapStore {
 		);
 	}
 
+	getCustomNodeColors(): string[] {
+		return [...this.data.customNodeColors];
+	}
+
+	addCustomNodeColor(color: string): void {
+		const normalized = color.toLowerCase();
+		if (!/^#[0-9a-f]{6}$/.test(normalized)) return;
+		this.data.customNodeColors = [
+			normalized,
+			...this.data.customNodeColors.filter((existing) => existing !== normalized),
+		].slice(0, 12);
+		this.queueSave();
+	}
+
+	removeCustomNodeColor(color: string): void {
+		const normalized = color.toLowerCase();
+		const next = this.data.customNodeColors.filter((existing) => existing !== normalized);
+		if (next.length === this.data.customNodeColors.length) return;
+		this.data.customNodeColors = next;
+		this.queueSave();
+	}
+
 	setCanvasOrder(parentCanvasPath: string | undefined, orderedPaths: readonly string[]): void {
 		const key = this.canvasOrderKey(parentCanvasPath);
 		const siblings = this.getSiblingCanvasPaths(parentCanvasPath);

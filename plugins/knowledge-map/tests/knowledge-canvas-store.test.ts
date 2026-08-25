@@ -171,4 +171,22 @@ describe('knowledge canvas relationships', () => {
 			.toEqual(['Renamed/Child.excalidraw.md']);
 		await store.flush();
 	});
+
+	it('saves, deduplicates, orders, and removes custom node colors', async () => {
+		vi.stubGlobal('window', { setTimeout, clearTimeout });
+		const plugin = {
+			loadData: async () => null,
+			saveData: async () => undefined,
+		} as unknown as Plugin;
+		const store = new KnowledgeMapStore(plugin);
+		await store.load();
+
+		store.addCustomNodeColor('#AABBCC');
+		store.addCustomNodeColor('#123456');
+		store.addCustomNodeColor('#aabbcc');
+		expect(store.getCustomNodeColors()).toEqual(['#aabbcc', '#123456']);
+		store.removeCustomNodeColor('#AABBCC');
+		expect(store.getCustomNodeColors()).toEqual(['#123456']);
+		await store.flush();
+	});
 });

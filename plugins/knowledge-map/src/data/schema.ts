@@ -1,6 +1,6 @@
 import type { FolderMapState, SavedNodePosition } from '../core/graph';
 
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 export type KnowledgeCanvasType = '2d' | '3d';
 
@@ -33,6 +33,7 @@ export interface KnowledgeMapData {
 	knowledgeCanvases: Record<string, KnowledgeCanvasState>;
 	canvasReferences: Record<string, string[]>;
 	canvasOrder: Record<string, string[]>;
+	customNodeColors: string[];
 }
 
 export const DEFAULT_SETTINGS: KnowledgeMapSettings = {
@@ -51,5 +52,6 @@ export function createDefaultData(): KnowledgeMapData {
 		knowledgeCanvases: {},
 		canvasReferences: {},
 		canvasOrder: {},
+		customNodeColors: [],
 	};
 }

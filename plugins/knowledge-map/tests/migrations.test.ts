@@ -14,11 +14,21 @@ describe('plugin data migrations', () => {
 			},
 		});
 
-		expect(migrated.schemaVersion).toBe(7);
+		expect(migrated.schemaVersion).toBe(8);
 		expect(migrated.knowledgeCanvases['Canvas.excalidraw.md']?.layouts).toEqual({});
 		expect(migrated.knowledgeCanvases['Canvas.excalidraw.md']?.canvasType).toBe('2d');
 		expect(migrated.canvasReferences).toEqual({});
 		expect(migrated.canvasOrder).toEqual({});
+		expect(migrated.customNodeColors).toEqual([]);
+	});
+
+	it('normalizes and limits saved custom node colors', () => {
+		const migrated = migrateData({
+			schemaVersion: 7,
+			customNodeColors: ['#AABBCC', 'invalid', '#aabbcc', '#123456'],
+		});
+
+		expect(migrated.customNodeColors).toEqual(['#aabbcc', '#123456']);
 	});
 
 	it('preserves persisted parent canvas relationships', () => {

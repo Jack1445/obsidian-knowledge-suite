@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
 	canNavigateBackFromKnowledgeCanvas,
+	createCustomNodeColorScheme,
 	createKnowledgeCanvasLink,
 	findKnowledgeCanvasFolderNode,
 	getKnowledgeCanvasContextTarget,
 	getKnowledgeCanvasFolderActivation,
+	mergeKnowledgeCanvasNodeAppearance,
+	normalizeCustomNodeColor,
 	parseKnowledgeCanvasLink,
 	readKnowledgeCanvasData,
 	resolveContextMenuElement,
@@ -49,6 +52,30 @@ describe('knowledge canvas metadata', () => {
 			path: 'World.canvas3d',
 		};
 		expect(readKnowledgeCanvasData({ customData: { knowledgeMap: data } })).toEqual(data);
+	});
+
+	it('merges persistent node appearance changes over the defaults', () => {
+		expect(mergeKnowledgeCanvasNodeAppearance(undefined)).toEqual({
+			palette: 'default',
+			shape: 'ellipse',
+		});
+		expect(mergeKnowledgeCanvasNodeAppearance(
+			{ palette: 'teal' },
+			{ shape: 'diamond' },
+		)).toEqual({
+			palette: 'teal',
+			shape: 'diamond',
+		});
+	});
+
+	it('normalizes a custom color and derives persistent node colors from it', () => {
+		expect(normalizeCustomNodeColor(' #12ABef ')).toBe('#12abef');
+		expect(normalizeCustomNodeColor('#123')).toBeNull();
+		expect(createCustomNodeColorScheme('#336699')).toEqual({
+			stroke: '#336699',
+			background: '#dee7ef',
+			text: '#203f5f',
+		});
 	});
 
 	it('opens every folder as an independent child canvas', () => {

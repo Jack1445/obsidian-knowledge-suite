@@ -73,6 +73,15 @@ This GitHub checkpoint freezes the version accepted in Obsidian before the conte
 - Grouped open, relationship, and information commands into clearer sections and refined their labels and icons.
 - Forced managed-node actions to use the styled DOM menu so the same appearance is preserved across platforms.
 
+## Stage 4B accepted checkpoint - 2026-08-25
+
+- Added persistent color and shape controls to managed 2D, 3D, and folder-canvas node menus.
+- Added compact common-color swatches plus an expandable palette with additional presets.
+- Added a centered custom-color dialog with live preview, hexadecimal input, and explicit Confirm and Cancel actions.
+- Saved up to twelve per-vault custom colors under My colors, with right-click removal and automatic deduplication.
+- Derived coordinated node backgrounds and readable text colors from custom colors while preserving the chosen accent.
+- Preserved node appearance across drawing reloads, Obsidian restarts, and generated folder-map refreshes.
+
 ## 0.1.0 - Unreleased
 
 ### Added

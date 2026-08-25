@@ -19,16 +19,22 @@ import { KnowledgeFormulaDialog, renderLatexToSvgDataUrl } from '../ui/formula-d
 import {
 	KNOWLEDGE_CANVAS_DATA_KEY,
 	canNavigateBackFromKnowledgeCanvas,
+	createCustomNodeColorScheme,
 	findKnowledgeCanvasFolderNode,
 	getKnowledgeCanvasContextTarget,
 	getKnowledgeCanvasFolderActivation,
+	mergeKnowledgeCanvasNodeAppearance,
 	parseKnowledgeCanvasLink,
 	readKnowledgeCanvasData,
 	resolveContextMenuElement,
 	resolveCurrentViewFile,
 	type KnowledgeCanvasAction,
 	type KnowledgeCanvasElementData,
+	type KnowledgeCanvasNodeAppearance,
+	type KnowledgeCanvasNodePalette,
+	type KnowledgeCanvasNodeShape,
 } from './knowledge-canvas-model';
+import { CustomNodeColorDialog } from '../ui/custom-node-color-dialog';
 
 const EXCALIDRAW_VIEW_TYPE = 'excalidraw';
 const NODE_SCALE = 1.35;
@@ -37,6 +43,44 @@ const NOTE_SIZE = 84;
 const TEXT_STYLE_DATA_KEY = 'knowledgeMapTextStyle';
 const BOLD_OFFSET_X = 0.72;
 const BOLD_OFFSET_Y = 0.18;
+const MANAGED_NODE_PALETTES: readonly {
+	id: KnowledgeCanvasNodePalette;
+	label: string;
+}[] = [
+	{ id: 'default', label: '默认' },
+	{ id: 'blue', label: '蓝色' },
+	{ id: 'purple', label: '紫色' },
+	{ id: 'green', label: '绿色' },
+	{ id: 'orange', label: '橙色' },
+	{ id: 'red', label: '红色' },
+];
+const MANAGED_NODE_EXTENDED_PALETTES: readonly {
+	id: KnowledgeCanvasNodePalette;
+	label: string;
+}[] = [
+	{ id: 'gray', label: '灰色' },
+	{ id: 'black', label: '黑色' },
+	{ id: 'cyan', label: '青色' },
+	{ id: 'teal', label: '蓝绿色' },
+	{ id: 'indigo', label: '靛蓝色' },
+	{ id: 'violet', label: '罗兰紫' },
+	{ id: 'magenta', label: '品红色' },
+	{ id: 'pink', label: '粉色' },
+	{ id: 'rose', label: '玫红色' },
+	{ id: 'lime', label: '青柠色' },
+	{ id: 'yellow', label: '黄色' },
+	{ id: 'amber', label: '琥珀色' },
+	{ id: 'brown', label: '棕色' },
+];
+const MANAGED_NODE_SHAPES: readonly {
+	id: KnowledgeCanvasNodeShape;
+	label: string;
+}[] = [
+	{ id: 'ellipse', label: '圆形' },
+	{ id: 'rounded', label: '圆角方形' },
+	{ id: 'rectangle', label: '方形' },
+	{ id: 'diamond', label: '菱形' },
+];
 
 interface ExcalidrawElementLike {
 	id: string;
@@ -61,6 +105,7 @@ interface ExcalidrawElementLike {
 	scale?: [number, number];
 	containerId?: string | null;
 	boundElements?: unknown[] | null;
+	roundness?: { type: number; value?: number } | null;
 	locked?: boolean;
 	x?: number;
 	y?: number;
@@ -605,7 +650,7 @@ export class ExcalidrawIntegration {
 			event.stopImmediatePropagation();
 			const currentFile = resolveCurrentViewFile(file, view.file);
 			if (targetType === 'canvas') {
-				this.showCanvasNodeMenu(currentFile, data.path, event);
+				this.showCanvasNodeMenu(currentFile, view, ea, data, event);
 			} else if (targetType === 'folder') {
 				this.showFolderNodeMenu(currentFile, view, ea, data, event);
 			} else if (targetFile instanceof TFile) {
@@ -1419,6 +1464,7 @@ export class ExcalidrawIntegration {
 			const generated = ea.getViewElements?.().filter((element) => {
 				return readKnowledgeCanvasData(element)?.scope === 'map';
 			}) ?? [];
+			const appearances = this.collectManagedNodeAppearances(generated);
 			if (generated.length > 0) ea.deleteViewElements?.(generated);
 
 			const graph = this.graphBuilder.build(normalizedPath, this.store.settings.showExternalLinks);
@@ -1434,6 +1480,7 @@ export class ExcalidrawIntegration {
 				graph,
 				positions,
 				state ? canNavigateBackFromKnowledgeCanvas(state) : false,
+				appearances,
 			);
 			const added = await ea.addElementsToView?.(false, true, true);
 			if (added === false) {
@@ -1483,6 +1530,7 @@ export class ExcalidrawIntegration {
 		graph: FolderGraph,
 		positions: Record<string, SavedNodePosition>,
 		canGoBack: boolean,
+		appearances: ReadonlyMap<string, KnowledgeCanvasNodeAppearance> = new Map(),
 	): void {
 		this.addHeader(ea, graph.folderPath);
 		this.addNavigation(ea, canGoBack);
@@ -1491,7 +1539,14 @@ export class ExcalidrawIntegration {
 		for (const node of graph.nodes) {
 			const point = positions[node.id];
 			if (!point) continue;
-			const nodeIds = this.addNode(ea, node, point.x * NODE_SCALE, point.y * NODE_SCALE, 'map');
+			const nodeIds = this.addNode(
+				ea,
+				node,
+				point.x * NODE_SCALE,
+				point.y * NODE_SCALE,
+				'map',
+				appearances.get(node.id),
+			);
 			elementIds.set(node.id, nodeIds.shapeId);
 		}
 
@@ -1540,28 +1595,34 @@ export class ExcalidrawIntegration {
 		centerX: number,
 		centerY: number,
 		scope: KnowledgeCanvasElementData['scope'],
+		appearance = mergeKnowledgeCanvasNodeAppearance(undefined),
 	): { shapeId: string; textId: string } {
 		const isFolder = node.kind === 'folder' || node.kind === 'current-folder';
 		const size = isFolder ? FOLDER_SIZE : NOTE_SIZE;
 		const x = centerX - size / 2;
 		const y = centerY - size / 2;
 		const isCurrent = node.kind === 'current-folder';
+		const colors = this.managedNodeColors({ nodeKind: node.kind }, appearance);
 		this.setShapeStyle(
 			ea,
-			this.nodeStrokeColor(node.kind),
-			this.nodeBackgroundColor(node.kind),
+			colors.stroke,
+			colors.background,
 			isCurrent ? 2.4 : 2,
 			0,
 		);
 		const shapeId = ea.addEllipse(x, y, size, size);
+		const shape = ea.getElement(shapeId);
+		if (shape) this.applyManagedNodeShape(shape, appearance.shape);
 		const data = elementData(scope, 'node', {
 			nodeKind: node.kind,
 			path: node.path,
 			action: node.kind === 'folder' ? 'folder' : undefined,
+			part: 'body',
+			appearance,
 		});
 		this.tag(ea, shapeId, data);
 
-		this.setTextStyle(ea, this.nodeTextColor(node.kind), isFolder ? 17 : 15);
+		this.setTextStyle(ea, colors.text, isFolder ? 17 : 15);
 		const textId = ea.addText(x, y + size / 2 - 11, node.label, {
 			width: size,
 			textAlign: 'center',
@@ -1571,6 +1632,8 @@ export class ExcalidrawIntegration {
 			nodeKind: node.kind,
 			path: node.path,
 			action: node.kind === 'folder' ? 'folder' : undefined,
+			part: 'label',
+			appearance,
 		}));
 		ea.addToGroup?.([shapeId, textId]);
 		return { shapeId, textId };
@@ -1846,14 +1909,26 @@ export class ExcalidrawIntegration {
 		const size = 92;
 		const x = centerX - size / 2;
 		const y = centerY - size / 2;
-		const data = elementData('manual', 'node', { canvasType, path: file.path });
+		const appearance = mergeKnowledgeCanvasNodeAppearance(undefined);
+		const bodyData = elementData('manual', 'node', {
+			canvasType,
+			path: file.path,
+			part: 'body',
+			appearance,
+		});
+		const iconData = elementData('manual', 'node', {
+			canvasType,
+			path: file.path,
+			part: 'icon',
+			appearance,
+		});
 		const ids: string[] = [];
 		const stroke = canvasType === '3d' ? '#4b8fc9' : '#7860a8';
 		const background = canvasType === '3d' ? '#e8f4ff' : '#f1edfb';
 		const textColor = canvasType === '3d' ? '#244b68' : '#43345f';
 		this.setShapeStyle(ea, stroke, background, 2.2, 0);
 		const bodyId = ea.addEllipse(x, y, size, size);
-		this.tag(ea, bodyId, data);
+		this.tag(ea, bodyId, bodyData);
 		ids.push(bodyId);
 
 		this.setShapeStyle(ea, stroke, 'transparent', 1.6, 0);
@@ -1870,7 +1945,7 @@ export class ExcalidrawIntegration {
 				ea.addArrow([[centerX, y + 31], [x + 65, y + 59]], { startArrowHead: null, endArrowHead: null }),
 			];
 		for (const id of iconIds) {
-			this.tag(ea, id, data);
+			this.tag(ea, id, iconData);
 			ids.push(id);
 		}
 
@@ -1880,7 +1955,12 @@ export class ExcalidrawIntegration {
 			textAlign: 'center',
 			autoResize: false,
 		});
-		this.tag(ea, textId, elementData('manual', 'label', { canvasType, path: file.path }));
+		this.tag(ea, textId, elementData('manual', 'label', {
+			canvasType,
+			path: file.path,
+			part: 'label',
+			appearance,
+		}));
 		ids.push(textId);
 		ea.addToGroup?.(ids);
 	}
@@ -1908,7 +1988,15 @@ export class ExcalidrawIntegration {
 		await this.app.workspace.openLinkText(target.path, sourceFile.path, openInNewLeaf);
 	}
 
-	private showCanvasNodeMenu(sourceFile: TFile, targetPath: string, event: MouseEvent): void {
+	private showCanvasNodeMenu(
+		sourceFile: TFile,
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		event: MouseEvent,
+	): void {
+		const targetPath = data.path;
+		if (!targetPath) return;
 		const targetFile = this.app.vault.getAbstractFileByPath(targetPath);
 		const targetState = targetFile instanceof TFile
 			? this.store.getKnowledgeCanvas(targetFile.path)
@@ -1948,6 +2036,7 @@ export class ExcalidrawIntegration {
 					? isChild ? '已取消子画布关系，引用关系仍然保留。' : '已设为当前画布的子画布。'
 					: '无法修改画布父子关系。');
 			}));
+		this.addManagedNodeAppearanceControls(menu, view, ea, data, event);
 		menu.showAtMouseEvent(event);
 	}
 
@@ -1990,6 +2079,7 @@ export class ExcalidrawIntegration {
 			.setIcon(isChild ? 'unlink' : 'git-branch-plus')
 			.setSection('knowledge-map-relationship')
 			.onClick(() => void this.setFolderChildRelationship(sourceFile, data.path!, targetPath, isChild)));
+		this.addManagedNodeAppearanceControls(menu, view, ea, data, event);
 		menu.showAtMouseEvent(event);
 	}
 
@@ -2098,6 +2188,377 @@ export class ExcalidrawIntegration {
 			.setSection(`knowledge-map-header-${kind}`));
 	}
 
+	private addManagedNodeAppearanceControls(
+		menu: Menu,
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		anchorEvent: MouseEvent,
+	): void {
+		const appearance = this.getManagedNodeAppearance(ea, data);
+		menu.addSeparator();
+		menu.addItem((item) => item
+			.setTitle('颜色')
+			.setIcon('palette')
+			.setIsLabel(true)
+			.setSection('knowledge-map-style'));
+		for (const option of MANAGED_NODE_PALETTES) {
+			menu.addItem((item) => item
+				.setTitle(this.createManagedNodeStyleOption(
+					'color',
+					option.id,
+					option.label,
+					appearance.palette === option.id,
+				))
+				.setSection('knowledge-map-style')
+				.onClick(() => void this.applyManagedNodeAppearance(
+					view,
+					ea,
+					data,
+					{ palette: option.id, customColor: undefined },
+				)));
+		}
+		const usesExtendedPalette = MANAGED_NODE_EXTENDED_PALETTES.some((option) => {
+			return option.id === appearance.palette;
+		}) || appearance.palette === 'custom';
+		menu.addItem((item) => item
+			.setTitle(this.createManagedNodeStyleOption(
+				'color',
+				'more',
+				'更多颜色',
+				usesExtendedPalette,
+			))
+			.setSection('knowledge-map-style')
+			.onClick((event) => this.showExpandedManagedNodePalette(
+				view,
+				ea,
+				data,
+				event instanceof MouseEvent ? event : anchorEvent,
+			)));
+		menu.addItem((item) => item
+			.setTitle('形状')
+			.setIcon('shapes')
+			.setIsLabel(true)
+			.setSection('knowledge-map-style'));
+		for (const option of MANAGED_NODE_SHAPES) {
+			menu.addItem((item) => item
+				.setTitle(this.createManagedNodeStyleOption(
+					'shape',
+					option.id,
+					option.label,
+					appearance.shape === option.id,
+				))
+				.setSection('knowledge-map-style')
+				.onClick(() => void this.applyManagedNodeAppearance(
+					view,
+					ea,
+					data,
+					{ shape: option.id },
+				)));
+		}
+	}
+
+	private showExpandedManagedNodePalette(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+		anchorEvent: MouseEvent,
+	): void {
+		window.setTimeout(() => {
+			const appearance = this.getManagedNodeAppearance(ea, data);
+			const menu = Menu.forEvent(anchorEvent).setUseNativeMenu(false);
+			menu.addItem((item) => item
+				.setTitle('更多颜色')
+				.setIcon('palette')
+				.setIsLabel(true)
+				.setSection('knowledge-map-style-more-header'));
+			const customColors = this.store.getCustomNodeColors();
+			if (customColors.length > 0) {
+				menu.addItem((item) => item
+					.setTitle('我的颜色')
+					.setIcon('bookmark')
+					.setIsLabel(true)
+					.setSection('knowledge-map-style-more'));
+				for (const color of customColors) {
+					menu.addItem((item) => item
+						.setTitle(this.createCustomNodeColorOption(
+							color,
+							appearance.palette === 'custom' && appearance.customColor === color,
+							menu,
+						))
+						.setSection('knowledge-map-style-more')
+						.onClick(() => void this.applyManagedNodeAppearance(
+							view,
+							ea,
+							data,
+							{ palette: 'custom', customColor: color },
+						)));
+				}
+			}
+			menu.addItem((item) => item
+				.setTitle('预设颜色')
+				.setIcon('swatch-book')
+				.setIsLabel(true)
+				.setSection('knowledge-map-style-more'));
+			for (const option of MANAGED_NODE_EXTENDED_PALETTES) {
+				menu.addItem((item) => item
+					.setTitle(this.createManagedNodeStyleOption(
+						'color',
+						option.id,
+						option.label,
+						appearance.palette === option.id,
+					))
+					.setSection('knowledge-map-style-more')
+					.onClick(() => void this.applyManagedNodeAppearance(
+						view,
+						ea,
+						data,
+						{ palette: option.id, customColor: undefined },
+					)));
+			}
+			menu.addItem((item) => item
+				.setTitle('自定义')
+				.setIcon('pipette')
+				.setIsLabel(true)
+				.setSection('knowledge-map-style-more'));
+			menu.addItem((item) => item
+				.setTitle(this.createManagedNodeStyleOption(
+					'color',
+					'picker',
+					'打开色盘',
+					false,
+				))
+				.setSection('knowledge-map-style-more')
+				.onClick(() => this.openCustomNodeColorPicker(view, ea, data)));
+			menu.showAtMouseEvent(anchorEvent);
+		}, 0);
+	}
+
+	private createCustomNodeColorOption(
+		color: string,
+		active: boolean,
+		menu: Menu,
+	): DocumentFragment {
+		return createFragment((fragment) => {
+			const preview = fragment.createSpan({
+				cls: [
+					'knowledge-map-style-preview',
+					'is-color',
+					'is-custom',
+					active ? 'is-active' : '',
+				].filter(Boolean).join(' '),
+			});
+			preview.style.setProperty('--knowledge-map-custom-color', color);
+			preview.setAttribute('aria-hidden', 'true');
+			preview.addEventListener('contextmenu', (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				this.store.removeCustomNodeColor(color);
+				menu.close();
+				new Notice('自定义颜色已删除。');
+			});
+			fragment.createSpan({
+				cls: 'knowledge-map-style-option-label',
+				text: `${color}；右键删除`,
+			});
+		});
+	}
+
+	private openCustomNodeColorPicker(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+	): void {
+		const initialColor = this.getManagedNodeAppearance(ea, data).customColor ?? '#4b82b5';
+		new CustomNodeColorDialog(this.app, initialColor, (color) => {
+			this.store.addCustomNodeColor(color);
+			void this.applyManagedNodeAppearance(
+				view,
+				ea,
+				data,
+				{ palette: 'custom', customColor: color },
+			);
+		}).open();
+	}
+
+	private createManagedNodeStyleOption(
+		kind: 'color' | 'shape',
+		value: KnowledgeCanvasNodePalette | KnowledgeCanvasNodeShape | 'more' | 'picker',
+		label: string,
+		active: boolean,
+	): DocumentFragment {
+		return createFragment((fragment) => {
+			const preview = fragment.createSpan({
+				cls: [
+					'knowledge-map-style-preview',
+					`is-${kind}`,
+					`is-${value}`,
+					active ? 'is-active' : '',
+				].filter(Boolean).join(' '),
+			});
+			preview.setAttribute('aria-hidden', 'true');
+			fragment.createSpan({ cls: 'knowledge-map-style-option-label', text: label });
+		});
+	}
+
+	private getManagedNodeAppearance(
+		ea: ExcalidrawAutomateLike,
+		data: KnowledgeCanvasElementData,
+	): KnowledgeCanvasNodeAppearance {
+		const persisted = this.findManagedNodeElements(ea, data)
+			.map((element) => readKnowledgeCanvasData(element)?.appearance)
+			.find((appearance) => Boolean(appearance));
+		return mergeKnowledgeCanvasNodeAppearance(persisted ?? data.appearance);
+	}
+
+	private findManagedNodeElements(
+		ea: ExcalidrawAutomateLike,
+		target: KnowledgeCanvasElementData,
+	): ExcalidrawElementLike[] {
+		if (!target.path) return [];
+		return (ea.getViewElements?.() ?? []).filter((element) => {
+			if (element.isDeleted) return false;
+			const data = readKnowledgeCanvasData(element);
+			if (!data || data.path !== target.path) return false;
+			if (target.canvasType) return data.canvasType === target.canvasType;
+			return Boolean(target.nodeKind && data.nodeKind === target.nodeKind);
+		});
+	}
+
+	private collectManagedNodeAppearances(
+		elements: readonly ExcalidrawElementLike[],
+	): Map<string, KnowledgeCanvasNodeAppearance> {
+		const appearances = new Map<string, KnowledgeCanvasNodeAppearance>();
+		for (const element of elements) {
+			const data = readKnowledgeCanvasData(element);
+			if (!data?.nodeKind || !data.path || !data.appearance) continue;
+			appearances.set(
+				`${data.nodeKind}:${data.path}`,
+				mergeKnowledgeCanvasNodeAppearance(data.appearance),
+			);
+		}
+		return appearances;
+	}
+
+	private async applyManagedNodeAppearance(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+		target: KnowledgeCanvasElementData,
+		patch: Partial<KnowledgeCanvasNodeAppearance>,
+	): Promise<void> {
+		if (!ea.copyViewElementsToEAforEditing || !ea.addElementsToView) return;
+		const elements = this.findManagedNodeElements(ea, target);
+		if (elements.length === 0) {
+			new Notice('找不到要修改的节点。');
+			return;
+		}
+		const appearance = mergeKnowledgeCanvasNodeAppearance(
+			this.getManagedNodeAppearance(ea, target),
+			patch,
+		);
+		const nodeElements = elements.filter((element) => readKnowledgeCanvasData(element)?.role === 'node');
+		const bodyId = nodeElements
+			.filter((element) => element.type !== 'arrow')
+			.sort((left, right) => (right.width ?? 0) * (right.height ?? 0) - (left.width ?? 0) * (left.height ?? 0))[0]?.id;
+		const colors = this.managedNodeColors(target, appearance);
+		this.stylingViews.add(view);
+		try {
+			ea.reset();
+			ea.copyViewElementsToEAforEditing(elements, false);
+			for (const element of elements) {
+				const editable = ea.getElement(element.id);
+				const data = readKnowledgeCanvasData(element);
+				if (!editable || !data) continue;
+				const part = data.part
+					?? (data.role === 'label' ? 'label' : element.id === bodyId ? 'body' : 'icon');
+				editable.customData = {
+					...(editable.customData ?? {}),
+					[KNOWLEDGE_CANVAS_DATA_KEY]: {
+						...data,
+						appearance,
+						part,
+					},
+				};
+				if (part === 'label') {
+					Object.assign(editable, {
+						strokeColor: colors.text,
+						backgroundColor: 'transparent',
+					});
+				} else if (part === 'body') {
+					Object.assign(editable, {
+						strokeColor: colors.stroke,
+						backgroundColor: colors.background,
+						fillStyle: 'solid',
+					});
+					this.applyManagedNodeShape(editable, appearance.shape);
+				} else {
+					Object.assign(editable, {
+						strokeColor: colors.stroke,
+						backgroundColor: 'transparent',
+					});
+				}
+			}
+			const added = await ea.addElementsToView(false, true, false);
+			if (added === false) {
+				new Notice('无法保存节点外观。');
+				return;
+			}
+			ea.selectElementsInView?.(elements.map((element) => element.id));
+			new Notice(patch.palette ? '节点颜色已更新。' : '节点形状已更新。');
+		} finally {
+			this.stylingViews.delete(view);
+		}
+	}
+
+	private applyManagedNodeShape(
+		element: ExcalidrawElementLike,
+		shape: KnowledgeCanvasNodeShape,
+	): void {
+		element.type = shape === 'ellipse' ? 'ellipse' : shape === 'diamond' ? 'diamond' : 'rectangle';
+		element.roundness = shape === 'rounded' ? { type: 3 } : null;
+	}
+
+	private managedNodeColors(
+		data: Pick<KnowledgeCanvasElementData, 'canvasType' | 'nodeKind'>,
+		appearance: KnowledgeCanvasNodeAppearance,
+	): { stroke: string; background: string; text: string } {
+		const { palette } = appearance;
+		if (palette === 'custom') {
+			return createCustomNodeColorScheme(appearance.customColor ?? '')
+				?? { stroke: '#717984', background: '#eef0f2', text: '#454b53' };
+		}
+		if (palette === 'default') {
+			if (data.canvasType === '3d') return { stroke: '#4b8fc9', background: '#e8f4ff', text: '#244b68' };
+			if (data.canvasType === '2d') return { stroke: '#7860a8', background: '#f1edfb', text: '#43345f' };
+			const kind = data.nodeKind ?? 'folder';
+			return {
+				stroke: this.nodeStrokeColor(kind),
+				background: this.nodeBackgroundColor(kind),
+				text: this.nodeTextColor(kind),
+			};
+		}
+		switch (palette) {
+			case 'amber': return { stroke: '#b47718', background: '#fff1cf', text: '#68450f' };
+			case 'black': return { stroke: '#242629', background: '#e7e8ea', text: '#202225' };
+			case 'blue': return { stroke: '#4b82b5', background: '#eaf4ff', text: '#294e70' };
+			case 'brown': return { stroke: '#805d46', background: '#f4ece7', text: '#513b2d' };
+			case 'cyan': return { stroke: '#258fa3', background: '#e3f7fa', text: '#245c67' };
+			case 'gray': return { stroke: '#717984', background: '#eef0f2', text: '#454b53' };
+			case 'purple': return { stroke: '#8066b3', background: '#f1edfb', text: '#493969' };
+			case 'green': return { stroke: '#4f8b68', background: '#eaf6ee', text: '#315a43' };
+			case 'indigo': return { stroke: '#5368b5', background: '#eceffd', text: '#354476' };
+			case 'lime': return { stroke: '#739f32', background: '#f0f7df', text: '#465f22' };
+			case 'magenta': return { stroke: '#a94faa', background: '#f8eaf8', text: '#653066' };
+			case 'orange': return { stroke: '#c77d2f', background: '#fff3d8', text: '#6d4826' };
+			case 'pink': return { stroke: '#c96590', background: '#fbeaf1', text: '#763d58' };
+			case 'red': return { stroke: '#b85c62', background: '#fbecee', text: '#71383d' };
+			case 'rose': return { stroke: '#b94f68', background: '#fbe9ee', text: '#713243' };
+			case 'teal': return { stroke: '#278a78', background: '#e3f5f1', text: '#24594f' };
+			case 'violet': return { stroke: '#7d5bb5', background: '#f1ebfa', text: '#4b376d' };
+			case 'yellow': return { stroke: '#b68c13', background: '#fff5c9', text: '#68520f' };
+		}
+	}
+
 	private async revealInFileNavigation(file: TAbstractFile): Promise<void> {
 		const leaf = this.app.workspace.getLeavesOfType('file-explorer')[0];
 		if (!leaf) {
@@ -2151,18 +2612,25 @@ export class ExcalidrawIntegration {
 			if (!editable || !data) continue;
 			editable.link = null;
 			if (data.role === 'node' && data.nodeKind) {
+				const appearance = mergeKnowledgeCanvasNodeAppearance(data.appearance);
+				const colors = this.managedNodeColors(data, appearance);
 				Object.assign(editable, {
-					strokeColor: this.nodeStrokeColor(data.nodeKind),
-					backgroundColor: this.nodeBackgroundColor(data.nodeKind),
+					strokeColor: colors.stroke,
+					backgroundColor: colors.background,
 					strokeWidth: data.nodeKind === 'current-folder' ? 2.4 : 2,
 					strokeStyle: 'solid',
 					fillStyle: 'solid',
 					roughness: 0,
 					opacity: 100,
 				});
+				if (data.part === 'body' || !data.part) {
+					this.applyManagedNodeShape(editable, appearance.shape);
+				}
 			} else if (data.role === 'label' && data.nodeKind) {
+				const appearance = mergeKnowledgeCanvasNodeAppearance(data.appearance);
+				const colors = this.managedNodeColors(data, appearance);
 				Object.assign(editable, {
-					strokeColor: this.nodeTextColor(data.nodeKind),
+					strokeColor: colors.text,
 					backgroundColor: 'transparent',
 					roughness: 0,
 					opacity: 100,
