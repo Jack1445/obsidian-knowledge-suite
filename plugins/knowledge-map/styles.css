@@ -826,6 +826,128 @@
 	overflow-x: hidden;
 }
 
+.knowledge-map-folder-canvas-dialog {
+	width: min(540px, calc(100vw - 32px));
+	max-width: 540px;
+}
+
+.knowledge-map-folder-canvas-dialog .modal-title {
+	font-size: 1.25rem;
+	font-weight: 700;
+	letter-spacing: -0.015em;
+}
+
+.knowledge-map-folder-canvas-dialog .modal-content {
+	padding-bottom: var(--size-4-5);
+}
+
+.knowledge-map-folder-canvas-dialog__intro {
+	margin: 2px 0 var(--size-4-4);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.6;
+}
+
+.knowledge-map-folder-canvas-dialog__choices {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.knowledge-map-folder-canvas-dialog__choice {
+	position: relative;
+	display: grid;
+	grid-template-rows: auto 1fr auto;
+	justify-items: start;
+	min-width: 0;
+	min-height: 170px;
+	height: auto;
+	padding: 18px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 16px;
+	background: linear-gradient(145deg, var(--background-primary-alt), var(--background-primary));
+	box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+	color: var(--text-normal);
+	text-align: start;
+	white-space: normal;
+	overflow: hidden;
+	transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.knowledge-map-folder-canvas-dialog__choice::after {
+	position: absolute;
+	top: -48px;
+	right: -44px;
+	width: 118px;
+	height: 118px;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--interactive-accent) 9%, transparent);
+	content: '';
+	pointer-events: none;
+}
+
+.knowledge-map-folder-canvas-dialog__choice:hover {
+	transform: translateY(-2px);
+	border-color: color-mix(in srgb, var(--interactive-accent) 52%, var(--background-modifier-border));
+	box-shadow: 0 12px 30px rgb(0 0 0 / 13%);
+}
+
+.knowledge-map-folder-canvas-dialog__choice-icon {
+	display: inline-grid;
+	width: 42px;
+	height: 42px;
+	place-items: center;
+	margin-bottom: 15px;
+	border-radius: 13px;
+	background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-primary));
+	color: var(--interactive-accent);
+}
+
+.knowledge-map-folder-canvas-dialog__choice.is-3d .knowledge-map-folder-canvas-dialog__choice-icon {
+	background: color-mix(in srgb, #5f8ee4 16%, var(--background-primary));
+	color: color-mix(in srgb, #5f8ee4 82%, var(--text-normal));
+}
+
+.knowledge-map-folder-canvas-dialog__choice-icon svg {
+	width: 22px;
+	height: 22px;
+}
+
+.knowledge-map-folder-canvas-dialog__choice-body {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.knowledge-map-folder-canvas-dialog__choice-title {
+	font-size: var(--font-ui-medium);
+	font-weight: 700;
+}
+
+.knowledge-map-folder-canvas-dialog__choice-desc {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.5;
+}
+
+.knowledge-map-folder-canvas-dialog__choice-action {
+	margin-top: 16px;
+	color: var(--text-accent);
+	font-size: var(--font-ui-smaller);
+	font-weight: 700;
+}
+
+@media (max-width: 520px) {
+	.knowledge-map-folder-canvas-dialog__choices {
+		grid-template-columns: 1fr;
+	}
+
+	.knowledge-map-folder-canvas-dialog__choice {
+		min-height: 145px;
+	}
+}
+
 .knowledge-map-canvas-manager__intro {
 	margin: 0 0 var(--size-4-4);
 	color: var(--text-muted);

@@ -9,6 +9,10 @@ import {
 	KNOWLEDGE_CANVAS_TREE_VIEW_TYPE,
 } from './views/canvas-tree-view';
 import { CanvasManagerModal } from './ui/canvas-manager-modal';
+import {
+	FolderCanvasTypeDialog,
+	type FolderCanvasTypeOption,
+} from './ui/folder-canvas-type-dialog';
 import { KnowledgeFormulaDialog, renderLatexToSvg } from './ui/formula-dialog';
 import { folderDisplayName, normalizeFolderPath } from './core/paths';
 import {
@@ -114,17 +118,56 @@ export default class KnowledgeMapPlugin extends Plugin {
 		}
 	}
 
-	async openOrCreateChildGlobeCanvas(parentCanvasPath: string, folderPath: string): Promise<void> {
-		const existingPath = this.store.findChildKnowledgeCanvas(parentCanvasPath, folderPath, '3d');
-		if (existingPath) {
-			const existingFile = this.app.vault.getAbstractFileByPath(existingPath);
-			if (existingFile instanceof TFile) {
-				await this.openManagedCanvasFile(existingFile.path, true, parentCanvasPath);
-				return;
+	async openOrChooseChildCanvas(parentCanvasPath: string, folderPath: string): Promise<void> {
+		const options: FolderCanvasTypeOption[] = [
+			{ canvasType: '2d' },
+			{ canvasType: '3d' },
+		];
+		for (const option of options) {
+			const existingPath = this.store.findChildKnowledgeCanvas(
+				parentCanvasPath,
+				folderPath,
+				option.canvasType,
+			);
+			if (!existingPath) continue;
+			if (this.app.vault.getAbstractFileByPath(existingPath) instanceof TFile) {
+				option.existingPath = existingPath;
+			} else {
+				this.store.removeKnowledgeCanvas(existingPath);
 			}
-			this.store.removeKnowledgeCanvas(existingPath);
 		}
-		await this.createGlobeCanvas(folderPath, parentCanvasPath);
+
+		const existingOptions = options.filter((option) => option.existingPath);
+		if (existingOptions.length === 1) {
+			await this.openFolderCanvasOption(parentCanvasPath, folderPath, existingOptions[0]!);
+			return;
+		}
+
+		new FolderCanvasTypeDialog(
+			this.app,
+			folderDisplayName(normalizeFolderPath(folderPath)),
+			options,
+			(option) => void this.openFolderCanvasOption(parentCanvasPath, folderPath, option),
+		).open();
+	}
+
+	private async openFolderCanvasOption(
+		parentCanvasPath: string,
+		folderPath: string,
+		option: FolderCanvasTypeOption,
+	): Promise<void> {
+		if (option.existingPath) {
+			this.store.addCanvasReference(parentCanvasPath, option.existingPath);
+			await this.store.flush();
+			await this.openManagedCanvasFile(option.existingPath, true, parentCanvasPath);
+			return;
+		}
+		const createdPath = option.canvasType === '3d'
+			? await this.createGlobeCanvas(folderPath, parentCanvasPath)
+			: await this.excalidraw.createKnowledgeCanvas(folderPath, parentCanvasPath);
+		if (!createdPath) return;
+		this.store.addCanvasReference(parentCanvasPath, createdPath);
+		await this.store.flush();
 	}
 
 	async openManagedCanvasFile(

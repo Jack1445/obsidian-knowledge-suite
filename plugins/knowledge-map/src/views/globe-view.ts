@@ -163,7 +163,7 @@ export class GlobeView extends TextFileView {
 					return;
 				}
 				if (node.kind === 'folder' && this.file) {
-					void this.plugin.openOrCreateChildGlobeCanvas(this.file.path, node.path);
+					void this.plugin.openOrChooseChildCanvas(this.file.path, node.path);
 					return;
 				}
 				const newLeaf = event.ctrlKey || event.metaKey || event.button === 1;
@@ -279,18 +279,24 @@ export class GlobeView extends TextFileView {
 				.setSection('knowledge-map-relationship')
 				.onClick(() => this.setCanvasChildRelationship(target.path, isChild)));
 		} else if (target instanceof TFolder) {
-			const childPath = this.plugin.store.findChildKnowledgeCanvas(this.file.path, target.path, '3d');
-			const isChild = Boolean(childPath);
+			const childPaths = (['2d', '3d'] as const)
+				.map((canvasType) => this.plugin.store.findChildKnowledgeCanvas(
+					this.file!.path,
+					target.path,
+					canvasType,
+				))
+				.filter((path): path is string => Boolean(path));
+			const isChild = childPaths.length > 0;
 			menu.addItem((item) => item
 				.setTitle('打开文件夹画布')
 				.setIcon('folder-open')
 				.setSection('knowledge-map-open')
-				.onClick(() => void this.plugin.openOrCreateChildGlobeCanvas(this.file!.path, target.path)));
+				.onClick(() => void this.plugin.openOrChooseChildCanvas(this.file!.path, target.path)));
 			menu.addItem((item) => item
 				.setTitle(isChild ? '取消设为子画布' : '设为子画布')
 				.setIcon(isChild ? 'unlink' : 'git-branch-plus')
 				.setSection('knowledge-map-relationship')
-				.onClick(() => void this.setFolderChildRelationship(target.path, childPath)));
+				.onClick(() => void this.setFolderChildRelationship(target.path, childPaths)));
 		} else if (target instanceof TFile) {
 			menu.addItem((item) => item
 				.setTitle('打开文件')
@@ -331,18 +337,18 @@ export class GlobeView extends TextFileView {
 			: '无法修改画布父子关系。');
 	}
 
-	private async setFolderChildRelationship(folderPath: string, childPath: string | null): Promise<void> {
+	private async setFolderChildRelationship(folderPath: string, childPaths: readonly string[]): Promise<void> {
 		if (!this.file) return;
-		if (childPath) {
-			this.plugin.store.addCanvasReference(this.file.path, childPath);
-			const changed = this.plugin.store.clearParentKnowledgeCanvas(childPath, this.file.path);
+		if (childPaths.length > 0) {
+			let changed = false;
+			for (const childPath of childPaths) {
+				this.plugin.store.addCanvasReference(this.file.path, childPath);
+				changed = this.plugin.store.clearParentKnowledgeCanvas(childPath, this.file.path) || changed;
+			}
 			new Notice(changed ? '已取消子画布关系，引用关系仍然保留。' : '无法修改画布父子关系。');
 			return;
 		}
-		const createdPath = await this.plugin.createGlobeCanvas(folderPath, this.file.path);
-		if (!createdPath) return;
-		this.plugin.store.addCanvasReference(this.file.path, createdPath);
-		new Notice('已设为当前画布的子画布。');
+		await this.plugin.openOrChooseChildCanvas(this.file.path, folderPath);
 	}
 
 	private addNodeAppearanceControls(menu: Menu, node: GlobeCanvasNode, anchorEvent: MouseEvent): void {
