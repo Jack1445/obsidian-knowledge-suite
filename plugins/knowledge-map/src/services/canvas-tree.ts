@@ -24,6 +24,15 @@ export function canvasDisplayName(filePath: string): string {
 		.replace(/\bblank canvas\b/gi, '空白画布');
 }
 
+export function canvasNodeDisplayName(filePath: string): string {
+	const displayName = canvasDisplayName(filePath);
+	const compactName = displayName.replace(
+		/\s+(?:2维|3维)画布\s+\d{4}-\d{2}-\d{2}\s+\d{2}-\d{2}-\d{2}$/u,
+		'',
+	).trim();
+	return compactName || displayName;
+}
+
 export function canvasRenamePath(filePath: string, requestedName: string): string | null {
 	const name = requestedName
 		.trim()

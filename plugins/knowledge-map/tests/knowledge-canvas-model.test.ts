@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	canNavigateBackFromKnowledgeCanvas,
 	createCustomNodeColorScheme,
+	createSvgBase64DataUrl,
 	createKnowledgeCanvasLink,
 	findKnowledgeCanvasFolderNode,
 	getKnowledgeCanvasContextTarget,
@@ -78,6 +79,17 @@ describe('knowledge canvas metadata', () => {
 			background: '#dee7ef',
 			text: '#203f5f',
 		});
+	});
+
+	it('encodes SVG icons as persistent base64 data URLs', () => {
+		const svg = '<svg xmlns="http://www.w3.org/2000/svg"><text>图标</text></svg>';
+		const dataUrl = createSvgBase64DataUrl(svg);
+		expect(dataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
+		const encoded = dataUrl.slice(dataUrl.indexOf(',') + 1);
+		const decoded = new TextDecoder().decode(
+			Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)),
+		);
+		expect(decoded).toBe(svg);
 	});
 
 	it('persists a selected library icon, emoji, or custom character in node appearance', () => {

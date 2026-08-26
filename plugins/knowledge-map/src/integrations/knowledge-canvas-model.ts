@@ -52,6 +52,7 @@ export interface KnowledgeCanvasElementData {
 	canvasType?: KnowledgeCanvasType;
 	edgeKind?: MapEdge['kind'];
 	iconVersion?: number;
+	visualVersion?: number;
 	latex?: string;
 	nodeKind?: MapNodeKind;
 	part?: KnowledgeCanvasElementPart;
@@ -112,6 +113,18 @@ export function createCustomNodeColorScheme(color: string): {
 		background: mix(255, 0.84),
 		text: mix(0, luminance > 0.72 ? 0.58 : 0.38),
 	};
+}
+
+/**
+ * Excalidraw persists data-URL images by decoding them into vault attachments.
+ * Base64 SVGs survive that binary conversion, while URL-encoded UTF-8 SVGs can
+ * remain visible only in the current scene and reopen as missing images.
+ */
+export function createSvgBase64DataUrl(svg: string): string {
+	const bytes = new TextEncoder().encode(svg);
+	let binary = '';
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	return `data:image/svg+xml;base64,${btoa(binary)}`;
 }
 
 /**

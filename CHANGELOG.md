@@ -6,6 +6,8 @@
 - Added a nestable Canvas tree with reference directions, context menus, and persisted drag sorting.
 - Redesigned managed-node context menus for canvases, folders, files, and ordinary Excalidraw elements.
 - Added persistent colors, shapes, custom palettes, Lucide icons, and Emoji icons to managed 2D and 3D nodes.
+- Persisted Lucide SVG assets across canvas reloads and automatically rebuilt previously missing managed-node icons.
+- Refined 2D managed nodes with unified sizing, internal layouts, fine strokes, compact generated canvas names, consistent folder icons, and dynamically sized text-first file nodes that retain complete names.
 - Refined 3D canvases with a star field, readable resizable nodes, direct context menus, and four-edge resizing.
 - Added a polished 2D/3D chooser when a folder in a 3D canvas needs a child canvas.
 - Fixed inline formulas hiding, spacing, misaligning, or blocking selection of following text.

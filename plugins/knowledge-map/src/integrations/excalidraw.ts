@@ -15,12 +15,13 @@ import { folderDisplayName, normalizeFolderPath } from '../core/paths';
 import type { KnowledgeMapStore } from '../data/store';
 import { VaultGraphBuilder } from '../obsidian/vault-graph-builder';
 import { createInitialPositions } from '../services/initial-layout';
-import { canvasDisplayName } from '../services/canvas-tree';
+import { canvasDisplayName, canvasNodeDisplayName } from '../services/canvas-tree';
 import { KnowledgeFormulaDialog, renderLatexToSvgDataUrl } from '../ui/formula-dialog';
 import {
 	KNOWLEDGE_CANVAS_DATA_KEY,
 	canNavigateBackFromKnowledgeCanvas,
 	createCustomNodeColorScheme,
+	createSvgBase64DataUrl,
 	findKnowledgeCanvasFolderNode,
 	getKnowledgeCanvasContextTarget,
 	getKnowledgeCanvasFolderActivation,
@@ -41,8 +42,10 @@ import { ManagedNodeIconDialog } from '../ui/managed-node-icon-dialog';
 
 const EXCALIDRAW_VIEW_TYPE = 'excalidraw';
 const NODE_SCALE = 1.35;
-const FOLDER_SIZE = 112;
-const NOTE_SIZE = 84;
+const FOLDER_SIZE = 108;
+const NOTE_SIZE = 96;
+const CANVAS_NODE_SIZE = 108;
+const MANAGED_NODE_VISUAL_VERSION = 3;
 const TEXT_STYLE_DATA_KEY = 'knowledgeMapTextStyle';
 const BOLD_OFFSET_X = 0.72;
 const BOLD_OFFSET_Y = 0.18;
@@ -101,6 +104,7 @@ interface ExcalidrawElementLike {
 	opacity?: number;
 	fontSize?: number;
 	fontFamily?: number;
+	fileId?: string | null;
 	textAlign?: 'left' | 'center' | 'right';
 	verticalAlign?: 'top' | 'middle' | 'bottom';
 	lineHeight?: number;
@@ -128,6 +132,9 @@ interface KnowledgeTextStyleData {
 interface ExcalidrawViewLike {
 	file?: TFile | null;
 	containerEl?: HTMLElement;
+	excalidrawData?: {
+		hasFile?(fileId: string): boolean;
+	};
 	excalidrawAPI?: {
 		getAppState(): {
 			editingTextElement?: ExcalidrawElementLike | null;
@@ -142,6 +149,7 @@ interface ExcalidrawViewLike {
 			y: number,
 			opts?: { preferSelected?: boolean; includeLockedElements?: boolean },
 		): ExcalidrawElementLike | null;
+		getFiles?(): Record<string, unknown>;
 		setViewport?(options: {
 			target: ExcalidrawElementLike;
 			fit: 'none';
@@ -160,6 +168,7 @@ interface ExcalidrawStyleLike {
 	fillStyle?: string;
 	roughness?: number;
 	fontSize?: number;
+	fontFamily?: number;
 }
 
 interface ExcalidrawDropData {
@@ -482,8 +491,12 @@ export class ExcalidrawIntegration {
 		// Do not inject the legacy whole-element B button because it duplicates
 		// the native control and competes for the textarea selection.
 		removeTextControls = (): void => undefined;
-		void this.upgradeManagedCanvasIcons(view, ea)
-			.then(() => this.polishManagedElements(file, ea));
+		void this.upgradeManagedMapVisuals(file, view, ea)
+			.then(() => this.upgradeManagedCanvasIcons(view, ea))
+			.then(() => this.upgradeManagedFileNodeVisuals(view, ea))
+			.then(() => this.repairMissingManagedLucideIcons(view, ea))
+			.then(() => this.polishManagedElements(file, ea))
+			.catch((error: unknown) => console.error('Unable to repair managed canvas icons', error));
 		return true;
 	}
 
@@ -1602,7 +1615,7 @@ export class ExcalidrawIntegration {
 		appearance = mergeKnowledgeCanvasNodeAppearance(undefined),
 	): Promise<{ shapeId: string; textId: string }> {
 		const isFolder = node.kind === 'folder' || node.kind === 'current-folder';
-		const size = isFolder ? FOLDER_SIZE : NOTE_SIZE;
+		const size = isFolder ? FOLDER_SIZE : this.managedFileNodeSize(node.label);
 		const x = centerX - size / 2;
 		const y = centerY - size / 2;
 		const isCurrent = node.kind === 'current-folder';
@@ -1611,7 +1624,7 @@ export class ExcalidrawIntegration {
 			ea,
 			colors.stroke,
 			colors.background,
-			isCurrent ? 2.4 : 2,
+			isCurrent ? 1.7 : 1.45,
 			0,
 		);
 		const shapeId = ea.addEllipse(x, y, size, size);
@@ -1623,12 +1636,13 @@ export class ExcalidrawIntegration {
 			action: node.kind === 'folder' ? 'folder' : undefined,
 			part: 'body',
 			appearance,
+			visualVersion: MANAGED_NODE_VISUAL_VERSION,
 		});
 		this.tag(ea, shapeId, data);
 		const ids = [shapeId];
-		const hasCustomIcon = appearance.icon.kind !== 'auto' && appearance.icon.kind !== 'none';
 		await this.addManagedFileNodeIcon(
 			ea,
+			node.kind,
 			appearance.icon,
 			x,
 			y,
@@ -1641,22 +1655,40 @@ export class ExcalidrawIntegration {
 				action: node.kind === 'folder' ? 'folder' : undefined,
 				part: 'icon',
 				appearance,
+				visualVersion: MANAGED_NODE_VISUAL_VERSION,
 			}),
 			ids,
 		);
 
-		this.setTextStyle(ea, colors.text, isFolder ? 17 : 15);
-		const textId = ea.addText(x, hasCustomIcon ? y + size - 31 : y + size / 2 - 11, node.label, {
-			width: size,
+		const hasVisibleIcon = isFolder
+			? appearance.icon.kind !== 'none'
+			: appearance.icon.kind !== 'auto' && appearance.icon.kind !== 'none';
+		this.setTextStyle(ea, colors.text, isFolder ? 15 : 14);
+		const textId = ea.addText(
+			x + 12,
+			hasVisibleIcon ? y + size - 37 : y + size / 2 - 11,
+			isFolder ? this.compactNodeLabel(node.label) : node.label,
+			{
+			width: size - 24,
 			textAlign: 'center',
 			autoResize: false,
 		});
+		const textElement = ea.getElement(textId);
+		if (!isFolder && textElement) textElement.fontFamily = 1;
+		if (
+			!hasVisibleIcon
+			&& textElement
+			&& textElement.height !== undefined
+		) {
+			textElement.y = y + Math.max(12, (size - textElement.height) / 2);
+		}
 		this.tag(ea, textId, elementData(scope, 'label', {
 			nodeKind: node.kind,
 			path: node.path,
 			action: node.kind === 'folder' ? 'folder' : undefined,
 			part: 'label',
 			appearance,
+			visualVersion: MANAGED_NODE_VISUAL_VERSION,
 		}));
 		ids.push(textId);
 		ea.addToGroup?.(ids);
@@ -1665,6 +1697,7 @@ export class ExcalidrawIntegration {
 
 	private async addManagedFileNodeIcon(
 		ea: ExcalidrawAutomateLike,
+		nodeKind: MapNode['kind'],
 		icon: KnowledgeCanvasNodeIcon,
 		x: number,
 		y: number,
@@ -1674,16 +1707,21 @@ export class ExcalidrawIntegration {
 		iconData: Record<string, unknown>,
 		ids: string[],
 	): Promise<void> {
-		if (icon.kind === 'auto' || icon.kind === 'none') return;
+		if (icon.kind === 'none') return;
+		if (icon.kind === 'auto') {
+			if (nodeKind === 'note' || nodeKind === 'external-note') return;
+			this.addManagedAutoFileIcon(ea, nodeKind, centerX, y + 22, color, iconData, ids);
+			return;
+		}
 		const value = icon.value?.trim();
 		if (!value) return;
 		if (icon.kind === 'lucide') {
 			if (!ea.addImage) return;
-			const imageFile = this.renderLucideIconDataUrl(value, color, 34);
+			const imageFile = this.renderLucideIconDataUrl(value, color, 32);
 			if (!imageFile) return;
 			const iconId = await ea.addImage({
-				topX: centerX - 17,
-				topY: y + Math.max(13, size * 0.18),
+				topX: centerX - 16,
+				topY: y + 20,
 				imageFile,
 				scale: false,
 				anchor: false,
@@ -1694,14 +1732,61 @@ export class ExcalidrawIntegration {
 			}
 			return;
 		}
-		this.setTextStyle(ea, color, icon.kind === 'emoji' ? 25 : icon.kind === 'symbol' ? 28 : 23);
-		const iconId = ea.addText(centerX - size / 2, y + Math.max(9, size * 0.12), value, {
+		this.setTextStyle(ea, color, icon.kind === 'emoji' ? 27 : icon.kind === 'symbol' ? 29 : 23);
+		const iconId = ea.addText(centerX - size / 2, y + 20, value, {
 			width: size,
 			textAlign: 'center',
 			autoResize: false,
 		});
 		this.tag(ea, iconId, iconData);
 		ids.push(iconId);
+	}
+
+	private addManagedAutoFileIcon(
+		ea: ExcalidrawAutomateLike,
+		nodeKind: MapNode['kind'],
+		centerX: number,
+		topY: number,
+		color: string,
+		iconData: Record<string, unknown>,
+		ids: string[],
+	): void {
+		this.setShapeStyle(ea, color, 'transparent', 1.35, 0);
+		const iconIds = nodeKind === 'folder' || nodeKind === 'current-folder'
+			? [ea.addArrow([
+				[centerX - 19, topY + 5],
+				[centerX - 7, topY + 5],
+				[centerX - 2, topY + 10],
+				[centerX + 19, topY + 10],
+				[centerX + 19, topY + 31],
+				[centerX - 19, topY + 31],
+				[centerX - 19, topY + 5],
+			], { startArrowHead: null, endArrowHead: null })]
+			: [
+				ea.addRect?.(centerX - 15, topY, 30, 36) ?? ea.addEllipse(centerX - 15, topY, 30, 36),
+				ea.addArrow([[centerX - 8, topY + 12], [centerX + 8, topY + 12]], { startArrowHead: null, endArrowHead: null }),
+				ea.addArrow([[centerX - 8, topY + 20], [centerX + 8, topY + 20]], { startArrowHead: null, endArrowHead: null }),
+			];
+		for (const id of iconIds) {
+			this.tag(ea, id, iconData);
+			ids.push(id);
+		}
+	}
+
+	private compactNodeLabel(label: string, limit = 12): string {
+		const characters = Array.from(label.trim());
+		return characters.length > limit ? `${characters.slice(0, limit).join('')}…` : label.trim();
+	}
+
+	private managedFileNodeSize(label: string): number {
+		const visualUnits = Array.from(label.trim()).reduce((total, character) => {
+			return total + ((character.codePointAt(0) ?? 0) <= 0xff ? 0.56 : 1);
+		}, 0);
+		if (visualUnits <= 9) return NOTE_SIZE;
+		if (visualUnits <= 18) return 120;
+		if (visualUnits <= 30) return 144;
+		if (visualUnits <= 46) return 168;
+		return 192;
 	}
 
 	private addEdge(
@@ -1972,7 +2057,7 @@ export class ExcalidrawIntegration {
 		centerY: number,
 		appearance = mergeKnowledgeCanvasNodeAppearance(undefined),
 	): Promise<void> {
-		const size = 92;
+		const size = CANVAS_NODE_SIZE;
 		const x = centerX - size / 2;
 		const y = centerY - size / 2;
 		const colors = this.managedNodeColors({ canvasType }, appearance);
@@ -1982,6 +2067,7 @@ export class ExcalidrawIntegration {
 			part: 'body',
 			appearance,
 			iconVersion: 2,
+			visualVersion: MANAGED_NODE_VISUAL_VERSION,
 		});
 		const iconData = elementData('manual', 'node', {
 			canvasType,
@@ -1989,9 +2075,10 @@ export class ExcalidrawIntegration {
 			part: 'icon',
 			appearance,
 			iconVersion: 2,
+			visualVersion: MANAGED_NODE_VISUAL_VERSION,
 		});
 		const ids: string[] = [];
-		this.setShapeStyle(ea, colors.stroke, colors.background, 2.2, 0);
+		this.setShapeStyle(ea, colors.stroke, colors.background, 1.5, 0);
 		const bodyId = ea.addEllipse(x, y, size, size);
 		const body = ea.getElement(bodyId);
 		if (body) this.applyManagedNodeShape(body, appearance.shape);
@@ -2001,8 +2088,8 @@ export class ExcalidrawIntegration {
 		await this.addManagedCanvasIcon(ea, canvasType, appearance.icon, x, y, centerX, colors.stroke, iconData, ids);
 
 		this.setTextStyle(ea, colors.text, 15);
-		const textId = ea.addText(centerX - 90, y + size + 10, canvasDisplayName(file.path), {
-			width: 180,
+		const textId = ea.addText(x + 8, y + size - 37, this.compactNodeLabel(canvasNodeDisplayName(file.path)), {
+			width: size - 16,
 			textAlign: 'center',
 			autoResize: false,
 		});
@@ -2012,6 +2099,7 @@ export class ExcalidrawIntegration {
 			part: 'label',
 			appearance,
 			iconVersion: 2,
+			visualVersion: MANAGED_NODE_VISUAL_VERSION,
 		}));
 		ids.push(textId);
 		ea.addToGroup?.(ids);
@@ -2032,11 +2120,11 @@ export class ExcalidrawIntegration {
 		if (icon.kind === 'lucide') {
 			const value = icon.value?.trim();
 			if (!value || !ea.addImage) return;
-			const imageFile = this.renderLucideIconDataUrl(value, color);
+			const imageFile = this.renderLucideIconDataUrl(value, color, 32);
 			if (!imageFile) return;
 			const iconId = await ea.addImage({
-				topX: centerX - 24,
-				topY: y + 23,
+				topX: centerX - 16,
+				topY: y + 20,
 				imageFile,
 				scale: false,
 				anchor: false,
@@ -2050,8 +2138,8 @@ export class ExcalidrawIntegration {
 		if (icon.kind !== 'auto') {
 			const value = icon.value?.trim();
 			if (!value) return;
-			this.setTextStyle(ea, color, icon.kind === 'emoji' ? 34 : icon.kind === 'symbol' ? 36 : 28);
-			const iconId = ea.addText(centerX - 36, y + 27, value, {
+			this.setTextStyle(ea, color, icon.kind === 'emoji' ? 28 : icon.kind === 'symbol' ? 30 : 25);
+			const iconId = ea.addText(centerX - 36, y + 20, value, {
 				width: 72,
 				textAlign: 'center',
 				autoResize: false,
@@ -2061,21 +2149,21 @@ export class ExcalidrawIntegration {
 			return;
 		}
 
-		this.setShapeStyle(ea, color, 'transparent', 1.6, 0);
+		this.setShapeStyle(ea, color, 'transparent', 1.3, 0);
 		const iconIds = canvasType === '3d'
 			? [
-				ea.addEllipse(x + 33, y + 18, 26, 56),
-				ea.addEllipse(x + 18, y + 27, 56, 20),
-				ea.addEllipse(x + 18, y + 45, 56, 20),
+				ea.addEllipse(centerX - 11, y + 19, 22, 42),
+				ea.addEllipse(centerX - 23, y + 27, 46, 14),
+				ea.addEllipse(centerX - 23, y + 42, 46, 14),
 			]
 			: [
-				ea.addEllipse(x + 40, y + 18, 12, 12),
-				ea.addEllipse(x + 21, y + 61, 12, 12),
-				ea.addEllipse(x + 59, y + 61, 12, 12),
-				ea.addArrow([[centerX, y + 30], [centerX, y + 48]], { startArrowHead: null, endArrowHead: null }),
-				ea.addArrow([[x + 27, y + 48], [x + 65, y + 48]], { startArrowHead: null, endArrowHead: null }),
-				ea.addArrow([[x + 27, y + 48], [x + 27, y + 61]], { startArrowHead: null, endArrowHead: null }),
-				ea.addArrow([[x + 65, y + 48], [x + 65, y + 61]], { startArrowHead: null, endArrowHead: null }),
+				ea.addEllipse(centerX - 6, y + 18, 12, 12),
+				ea.addEllipse(centerX - 24, y + 51, 12, 12),
+				ea.addEllipse(centerX + 12, y + 51, 12, 12),
+				ea.addArrow([[centerX, y + 30], [centerX, y + 43]], { startArrowHead: null, endArrowHead: null }),
+				ea.addArrow([[centerX - 18, y + 43], [centerX + 18, y + 43]], { startArrowHead: null, endArrowHead: null }),
+				ea.addArrow([[centerX - 18, y + 43], [centerX - 18, y + 51]], { startArrowHead: null, endArrowHead: null }),
+				ea.addArrow([[centerX + 18, y + 43], [centerX + 18, y + 51]], { startArrowHead: null, endArrowHead: null }),
 			];
 		for (const id of iconIds) {
 			this.tag(ea, id, iconData);
@@ -2092,11 +2180,14 @@ export class ExcalidrawIntegration {
 		icon.setAttribute('stroke', color);
 		icon.setAttribute('color', color);
 		icon.setAttribute('fill', 'none');
+		icon.setAttribute('stroke-width', '1.65');
+		icon.setAttribute('stroke-linecap', 'round');
+		icon.setAttribute('stroke-linejoin', 'round');
 		icon.style.color = color;
 		for (const element of Array.from(icon.querySelectorAll<SVGElement>('*'))) {
 			if (element.getAttribute('stroke') === 'currentColor') element.setAttribute('stroke', color);
 		}
-		return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon.outerHTML)}`;
+		return createSvgBase64DataUrl(icon.outerHTML);
 	}
 
 	private async openManagedCanvasFile(
@@ -2469,6 +2560,7 @@ export class ExcalidrawIntegration {
 		appearance: KnowledgeCanvasNodeAppearance,
 		failureMessage: string,
 		successMessage: string,
+		notify = true,
 	): Promise<void> {
 		if (!data.path || !data.canvasType || !ea.addElementsToView) return;
 		const file = this.app.vault.getAbstractFileByPath(data.path);
@@ -2507,7 +2599,7 @@ export class ExcalidrawIntegration {
 				appearance,
 			);
 			const added = await ea.addElementsToView(false, true, true);
-			new Notice(added === false ? failureMessage : successMessage);
+			if (notify) new Notice(added === false ? failureMessage : successMessage);
 		} finally {
 			this.stylingViews.delete(view);
 		}
@@ -2520,6 +2612,7 @@ export class ExcalidrawIntegration {
 		appearance: KnowledgeCanvasNodeAppearance,
 		failureMessage: string,
 		successMessage: string,
+		notify = true,
 	): Promise<void> {
 		if (!data.path || !data.nodeKind || !ea.addElementsToView) return;
 		const target = this.app.vault.getAbstractFileByPath(data.path);
@@ -2561,7 +2654,7 @@ export class ExcalidrawIntegration {
 				appearance,
 			);
 			const added = await ea.addElementsToView(false, true, true);
-			new Notice(added === false ? failureMessage : successMessage);
+			if (notify) new Notice(added === false ? failureMessage : successMessage);
 		} finally {
 			this.stylingViews.delete(view);
 		}
@@ -2576,7 +2669,12 @@ export class ExcalidrawIntegration {
 		const legacyTargets = new Map<string, KnowledgeCanvasElementData>();
 		for (const element of elements) {
 			const data = readKnowledgeCanvasData(element);
-			if (!data?.canvasType || !data.path || data.iconVersion === 2 || element.isDeleted) continue;
+			if (
+				!data?.canvasType
+				|| !data.path
+				|| data.iconVersion === 2 && data.visualVersion === MANAGED_NODE_VISUAL_VERSION
+				|| element.isDeleted
+			) continue;
 			legacyTargets.set(`${data.canvasType}:${data.path}`, data);
 		}
 		if (legacyTargets.size === 0) return;
@@ -2631,6 +2729,109 @@ export class ExcalidrawIntegration {
 			await ea.addElementsToView(false, true, true);
 		} finally {
 			this.stylingViews.delete(view);
+		}
+	}
+
+	private async upgradeManagedMapVisuals(
+		file: TFile,
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+	): Promise<void> {
+		const state = this.store.getKnowledgeCanvas(file.path);
+		if (!state || !ea.getViewElements) return;
+		const needsUpgrade = ea.getViewElements().some((element) => {
+			const data = readKnowledgeCanvasData(element);
+			return data?.scope === 'map'
+				&& data.role === 'node'
+				&& data.nodeKind !== undefined
+				&& (data.part === 'body' || data.part === undefined)
+				&& data.visualVersion !== MANAGED_NODE_VISUAL_VERSION
+				&& !element.isDeleted;
+		});
+		if (!needsUpgrade) return;
+		await this.renderFolderIntoView(file, state.folderPath, view, ea, false, false, true);
+	}
+
+	private async upgradeManagedFileNodeVisuals(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+	): Promise<void> {
+		if (!ea.getViewElements || !ea.addElementsToView) return;
+		const legacyTargets = new Map<string, KnowledgeCanvasElementData>();
+		for (const element of ea.getViewElements()) {
+			const data = readKnowledgeCanvasData(element);
+			if (
+				data?.scope !== 'manual'
+				|| !data.nodeKind
+				|| !data.path
+				|| data.canvasType
+				|| data.visualVersion === MANAGED_NODE_VISUAL_VERSION
+				|| element.isDeleted
+			) continue;
+			legacyTargets.set(`${data.nodeKind}:${data.path}`, data);
+		}
+		for (const data of legacyTargets.values()) {
+			await this.replaceManagedFileNode(
+				view,
+				ea,
+				data,
+				this.getManagedNodeAppearance(ea, data),
+				'无法升级节点外观。',
+				'节点外观已升级。',
+				false,
+			);
+		}
+	}
+
+	private async repairMissingManagedLucideIcons(
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+	): Promise<void> {
+		const api = view.excalidrawAPI;
+		const persistentFiles = view.excalidrawData;
+		if (!persistentFiles?.hasFile && !api?.getFiles || !ea.getViewElements) return;
+		const files = api?.getFiles?.() ?? {};
+		const targets = new Map<string, KnowledgeCanvasElementData>();
+		for (const element of ea.getViewElements()) {
+			if (
+				element.type !== 'image'
+				|| !element.fileId
+			) continue;
+			const hasPersistentFile = persistentFiles?.hasFile?.(element.fileId) ?? false;
+			const hasSceneFile = Object.prototype.hasOwnProperty.call(files, element.fileId);
+			if (hasPersistentFile || hasSceneFile) continue;
+			const data = readKnowledgeCanvasData(element);
+			if (
+				data?.part !== 'icon'
+				|| data.appearance?.icon.kind !== 'lucide'
+				|| !data.path
+			) continue;
+			const type = data.canvasType ?? data.nodeKind;
+			if (type) targets.set(`${type}:${data.path}`, data);
+		}
+		for (const data of targets.values()) {
+			const appearance = mergeKnowledgeCanvasNodeAppearance(data.appearance);
+			if (data.canvasType) {
+				await this.replaceManagedCanvasNode(
+					view,
+					ea,
+					data,
+					appearance,
+					'无法恢复节点图标。',
+					'节点图标已恢复。',
+					false,
+				);
+			} else if (data.nodeKind) {
+				await this.replaceManagedFileNode(
+					view,
+					ea,
+					data,
+					appearance,
+					'无法恢复节点图标。',
+					'节点图标已恢复。',
+					false,
+				);
+			}
 		}
 	}
 
@@ -3009,27 +3210,37 @@ export class ExcalidrawIntegration {
 			const data = readKnowledgeCanvasData(element);
 			if (!editable || !data) continue;
 			editable.link = null;
-			if (data.role === 'node' && data.nodeKind) {
+			if (data.role === 'node' && (data.nodeKind || data.canvasType)) {
 				const appearance = mergeKnowledgeCanvasNodeAppearance(data.appearance);
 				const colors = this.managedNodeColors(data, appearance);
-				Object.assign(editable, {
-					strokeColor: colors.stroke,
-					backgroundColor: colors.background,
-					strokeWidth: data.nodeKind === 'current-folder' ? 2.4 : 2,
-					strokeStyle: 'solid',
-					fillStyle: 'solid',
-					roughness: 0,
-					opacity: 100,
-				});
 				if (data.part === 'body' || !data.part) {
+					Object.assign(editable, {
+						strokeColor: colors.stroke,
+						backgroundColor: colors.background,
+						strokeWidth: data.nodeKind === 'current-folder' ? 1.7 : 1.45,
+						strokeStyle: 'solid',
+						fillStyle: 'solid',
+						roughness: 0,
+						opacity: 100,
+					});
 					this.applyManagedNodeShape(editable, appearance.shape);
+				} else {
+					Object.assign(editable, {
+						strokeColor: colors.stroke,
+						backgroundColor: 'transparent',
+						strokeWidth: 1.35,
+						strokeStyle: 'solid',
+						roughness: 0,
+						opacity: 100,
+					});
 				}
-			} else if (data.role === 'label' && data.nodeKind) {
+			} else if (data.role === 'label' && (data.nodeKind || data.canvasType)) {
 				const appearance = mergeKnowledgeCanvasNodeAppearance(data.appearance);
 				const colors = this.managedNodeColors(data, appearance);
 				Object.assign(editable, {
 					strokeColor: colors.text,
 					backgroundColor: 'transparent',
+					fontFamily: data.nodeKind === 'note' || data.nodeKind === 'external-note' ? 1 : 2,
 					roughness: 0,
 					opacity: 100,
 				});
@@ -3081,7 +3292,12 @@ export class ExcalidrawIntegration {
 
 	private setTextStyle(ea: ExcalidrawAutomateLike, color: string, fontSize: number): void {
 		if (!ea.style) return;
-		Object.assign(ea.style, { strokeColor: color, backgroundColor: 'transparent', fontSize });
+		Object.assign(ea.style, {
+			strokeColor: color,
+			backgroundColor: 'transparent',
+			fontSize,
+			fontFamily: 2,
+		});
 	}
 
 	private tag(ea: ExcalidrawAutomateLike, id: string, data: Record<string, unknown>): void {

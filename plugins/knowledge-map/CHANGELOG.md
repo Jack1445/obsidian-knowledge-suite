@@ -8,6 +8,9 @@ All notable changes to Knowledge Map are documented here. Each tested GitHub che
 - Added an infinitely nestable Canvas tree with reference folders, direction indicators, file operations, and remembered drag order.
 - Added precise, localized context menus for canvases, folders, files, and ordinary Excalidraw elements.
 - Added persistent node colors, shapes, custom palettes, Lucide icons, Emoji icons, and compact visual-layer controls.
+- Fixed Lucide icons reopening as missing-image placeholders and automatically rebuilt affected existing nodes.
+- Refined 2D nodes with internal composition, consistent spacing, fine strokes, compact generated canvas names, matching folder icons, and dynamically sized text-first file nodes that keep complete file names.
+- Renamed the no-icon display mode to text-only and kept custom icon layouts available for files when explicitly selected.
 - Reworked the 3D canvas with a star field, readable managed nodes, direct menus, and resizing from all four edges.
 - Added a 2D/3D type chooser for folders opened from a 3D canvas, including explicit empty/existing-state guidance.
 - Preserved references when structural child relationships are removed and prevented reversed or duplicate hierarchy entries.

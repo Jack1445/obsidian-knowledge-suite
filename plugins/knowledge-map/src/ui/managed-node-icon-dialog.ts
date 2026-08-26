@@ -59,8 +59,8 @@ export class ManagedNodeIconDialog extends Modal {
 		this.titleEl.setText('选择节点图标');
 
 		this.addSection('显示方式', [
-			{ icon: { kind: 'auto' }, label: '自动匹配画布类型', preview: '自动' },
-			{ icon: { kind: 'none' }, label: '不显示图标', preview: '无' },
+			{ icon: { kind: 'auto' }, label: '自动匹配节点类型', preview: '自动' },
+			{ icon: { kind: 'none' }, label: '仅显示节点文字', preview: '仅文字' },
 		], 'is-mode');
 
 		const searchShell = this.contentEl.createDiv({ cls: 'knowledge-map-icon-dialog__search' });

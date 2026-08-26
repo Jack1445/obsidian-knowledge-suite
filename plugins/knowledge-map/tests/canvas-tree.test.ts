@@ -3,6 +3,7 @@ import type { KnowledgeCanvasState } from '../src/data/schema';
 import {
 	buildCanvasTree,
 	canvasDisplayName,
+	canvasNodeDisplayName,
 	canvasMovePath,
 	canvasRenamePath,
 	mergeCanvasReferences,
@@ -78,6 +79,14 @@ describe('canvas tree', () => {
 			.toBe('仓库 2维画布 2026');
 		expect(canvasDisplayName('Canvas.md')).toBe('Canvas');
 		expect(canvasDisplayName('世界 3维画布.canvas3d')).toBe('世界 3维画布');
+	});
+
+	it('uses a compact generated name inside a canvas node', () => {
+		expect(canvasNodeDisplayName('生活/生活 3维画布 2026-08-24 12-13-53.canvas3d'))
+			.toBe('生活');
+		expect(canvasNodeDisplayName('仓库 2维画布 2026-08-24 12-11-48.excalidraw.md'))
+			.toBe('仓库');
+		expect(canvasNodeDisplayName('顶层画布.excalidraw.md')).toBe('顶层画布');
 	});
 
 	it('preserves the canvas suffix when renaming and validates Windows file names', () => {
