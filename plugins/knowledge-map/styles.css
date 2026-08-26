@@ -556,47 +556,18 @@
 	background: #070a17;
 }
 
-.knowledge-map-globe__toolbar {
-	display: flex;
-	align-items: center;
-	gap: var(--size-4-2);
-	min-height: 50px;
-	padding: 7px 12px;
-	border-bottom: 1px solid rgb(148 180 255 / 14%);
-	background: linear-gradient(90deg, rgb(10 14 31 / 98%), rgb(13 19 40 / 96%));
-	box-shadow: 0 8px 28px rgb(0 0 0 / 18%);
-	color: #e8edf7;
-}
-
-.knowledge-map-globe__toolbar button {
-	border-color: rgb(150 181 243 / 20%);
-	background: rgb(255 255 255 / 7%);
-	box-shadow: none;
-	color: #eaf1ff;
-}
-
-.knowledge-map-globe__toolbar button:hover {
-	border-color: rgb(150 191 255 / 44%);
-	background: rgb(119 165 255 / 15%);
-}
-
-.knowledge-map-globe__title {
-	flex: 1;
-	font-size: 14px;
-	font-weight: 680;
-	letter-spacing: 0.01em;
-}
-
 .knowledge-map-globe__stage {
 	position: relative;
 	flex: 1;
 	min-height: 0;
 	overflow: hidden;
 	background:
-		radial-gradient(circle at 16% 18%, rgb(71 97 175 / 22%), transparent 31%),
-		radial-gradient(circle at 82% 24%, rgb(103 66 158 / 18%), transparent 28%),
-		radial-gradient(circle at 70% 86%, rgb(26 105 145 / 15%), transparent 34%),
-		linear-gradient(155deg, #0a1025 0%, #060916 48%, #090c1d 100%);
+		radial-gradient(ellipse at 50% 43%, transparent 0 34%, rgb(0 2 9 / 34%) 61%, rgb(0 1 6 / 92%) 100%),
+		radial-gradient(ellipse at 14% 18%, rgb(31 49 105 / 15%), transparent 37%),
+		radial-gradient(ellipse at 86% 22%, rgb(69 42 105 / 11%), transparent 34%),
+		radial-gradient(ellipse at 72% 88%, rgb(12 62 84 / 9%), transparent 38%),
+		linear-gradient(148deg, #050a17 0%, #02040c 48%, #04040f 100%);
+	box-shadow: inset 0 0 210px rgb(0 0 5 / 82%);
 	transition: box-shadow 140ms ease;
 }
 
@@ -606,18 +577,59 @@
 	inset: 0;
 	z-index: 0;
 	background-image:
-		radial-gradient(circle at 11% 29%, rgb(255 255 255 / 72%) 0 1px, transparent 1.7px),
-		radial-gradient(circle at 37% 12%, rgb(185 214 255 / 65%) 0 1px, transparent 1.8px),
-		radial-gradient(circle at 68% 19%, rgb(255 231 197 / 60%) 0 1.2px, transparent 2px),
-		radial-gradient(circle at 87% 63%, rgb(209 197 255 / 58%) 0 1px, transparent 1.8px),
-		radial-gradient(circle at 22% 78%, rgb(255 255 255 / 58%) 0 1px, transparent 1.8px);
-	background-size: 233px 211px, 307px 283px, 379px 337px, 421px 389px, 277px 319px;
-	opacity: 0.72;
+		radial-gradient(circle at 11% 29%, rgb(255 255 255 / 82%) 0 0.7px, transparent 1.5px),
+		radial-gradient(circle at 37% 12%, rgb(178 215 255 / 76%) 0 0.8px, transparent 1.7px),
+		radial-gradient(circle at 68% 19%, rgb(255 225 185 / 72%) 0 1px, transparent 2px),
+		radial-gradient(circle at 87% 63%, rgb(208 191 255 / 68%) 0 0.8px, transparent 1.7px),
+		radial-gradient(circle at 22% 78%, rgb(255 255 255 / 66%) 0 0.7px, transparent 1.6px),
+		radial-gradient(circle at 52% 66%, rgb(151 203 255 / 54%) 0 0.6px, transparent 1.45px),
+		radial-gradient(circle at 76% 42%, rgb(255 242 218 / 48%) 0 0.65px, transparent 1.5px);
+	background-size: 233px 211px, 307px 283px, 379px 337px, 421px 389px, 277px 319px, 347px 271px, 419px 353px;
+	opacity: 0.7;
+	filter: drop-shadow(0 0 2px rgb(157 202 255 / 34%));
+	animation: knowledge-map-star-drift 70s linear infinite alternate;
 	pointer-events: none;
 }
 
+.knowledge-map-globe__stage::after {
+	content: '';
+	position: absolute;
+	inset: -16%;
+	z-index: 0;
+	background:
+		radial-gradient(ellipse at 18% 38%, rgb(56 91 187 / 18%) 0, rgb(67 56 155 / 10%) 25%, transparent 56%),
+		radial-gradient(ellipse at 79% 29%, rgb(119 72 161 / 14%) 0, rgb(45 78 157 / 8%) 28%, transparent 58%),
+		radial-gradient(ellipse at 63% 82%, rgb(30 129 153 / 10%) 0, transparent 50%),
+		radial-gradient(ellipse at 38% 72%, rgb(184 106 77 / 5%) 0, transparent 43%);
+	filter: blur(30px) saturate(112%);
+	mix-blend-mode: screen;
+	opacity: 0.42;
+	transform: scale(1.02) rotate(-2deg);
+	animation: knowledge-map-nebula-breathe 24s ease-in-out infinite alternate;
+	pointer-events: none;
+}
+
+@keyframes knowledge-map-star-drift {
+	from { transform: translate3d(-5px, -3px, 0) scale(1.01); }
+	to { transform: translate3d(7px, 5px, 0) scale(1.025); }
+}
+
+@keyframes knowledge-map-nebula-breathe {
+	from { opacity: 0.3; transform: scale(1.01) rotate(-2deg) translate3d(-0.4%, 0, 0); }
+	to { opacity: 0.46; transform: scale(1.055) rotate(1deg) translate3d(0.5%, -0.4%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.knowledge-map-globe__stage::before,
+	.knowledge-map-globe__stage::after {
+		animation: none;
+	}
+}
+
 .knowledge-map-globe__stage.is-dragging-over {
-	box-shadow: inset 0 0 0 3px rgb(112 177 255 / 70%);
+	box-shadow:
+		inset 0 0 0 3px rgb(112 177 255 / 70%),
+		inset 0 0 210px rgb(0 0 5 / 82%);
 }
 
 .knowledge-map-globe__canvas,
@@ -635,6 +647,58 @@
 
 .knowledge-map-globe__canvas {
 	z-index: 1;
+	cursor: crosshair;
+}
+
+.knowledge-map-globe__stage.is-space-pressed .knowledge-map-globe__canvas {
+	cursor: grab;
+}
+
+.knowledge-map-globe__stage.is-space-pressed .knowledge-map-globe__canvas:active {
+	cursor: grabbing;
+}
+
+.knowledge-map-globe__selection-box {
+	position: absolute;
+	z-index: 5;
+	display: none;
+	border: 1px solid rgb(137 194 255 / 88%);
+	border-radius: 7px;
+	background: rgb(77 151 232 / 16%);
+	box-shadow:
+		0 0 0 1px rgb(255 255 255 / 9%) inset,
+		0 8px 28px rgb(0 0 0 / 18%);
+	pointer-events: none;
+}
+
+.knowledge-map-globe__selection-box.is-visible {
+	display: block;
+}
+
+.knowledge-map-globe__interaction-hint {
+	position: absolute;
+	z-index: 4;
+	top: 14px;
+	left: 50%;
+	max-width: calc(100% - 32px);
+	padding: 7px 13px;
+	transform: translateX(-50%);
+	border: 1px solid rgb(173 204 255 / 17%);
+	border-radius: 999px;
+	background: rgb(7 13 29 / 72%);
+	box-shadow:
+		0 10px 30px rgb(0 0 0 / 22%),
+		0 1px 0 rgb(255 255 255 / 7%) inset;
+	backdrop-filter: blur(12px) saturate(118%);
+	color: rgb(224 235 252 / 72%);
+	font-family: var(--font-interface);
+	font-size: 11px;
+	font-weight: 520;
+	letter-spacing: 0.015em;
+	line-height: 1.35;
+	text-align: center;
+	white-space: nowrap;
+	pointer-events: none;
 }
 
 .knowledge-map-globe__empty {
@@ -694,6 +758,14 @@
 		0 10px 28px rgb(0 0 0 / 52%),
 		0 0 0 2px rgb(255 255 255 / 44%) inset,
 		0 0 24px color-mix(in srgb, var(--knowledge-map-globe-node-accent, #4c86b7) 44%, transparent);
+}
+
+.knowledge-map-globe__label.is-selected {
+	filter: brightness(1.08) saturate(1.1);
+	box-shadow:
+		0 12px 30px rgb(0 0 0 / 54%),
+		0 0 0 3px rgb(195 226 255 / 76%),
+		0 0 28px color-mix(in srgb, var(--knowledge-map-globe-node-accent, #4c86b7) 58%, transparent);
 }
 
 .knowledge-map-globe__label-icon {
@@ -819,6 +891,74 @@
 .knowledge-map-canvas-manager-modal {
 	width: min(760px, calc(100vw - 32px));
 	max-width: 760px;
+}
+
+.knowledge-map-globe-remove-dialog {
+	width: min(480px, calc(100vw - 32px));
+}
+
+.knowledge-map-globe-remove-dialog .modal-title {
+	font-size: 20px;
+	font-weight: 700;
+	letter-spacing: -0.015em;
+}
+
+.knowledge-map-globe-remove-dialog__summary {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	margin-top: 6px;
+	padding: 16px;
+	border: 1px solid color-mix(in srgb, var(--color-orange) 24%, var(--background-modifier-border));
+	border-radius: 14px;
+	background: color-mix(in srgb, var(--color-orange) 6%, var(--background-secondary));
+}
+
+.knowledge-map-globe-remove-dialog__icon {
+	display: grid;
+	place-items: center;
+	flex: 0 0 38px;
+	width: 38px;
+	height: 38px;
+	border-radius: 11px;
+	background: color-mix(in srgb, var(--color-orange) 14%, var(--background-primary));
+	color: var(--color-orange);
+}
+
+.knowledge-map-globe-remove-dialog__icon svg {
+	width: 19px;
+	height: 19px;
+}
+
+.knowledge-map-globe-remove-dialog__copy {
+	min-width: 0;
+}
+
+.knowledge-map-globe-remove-dialog__copy p {
+	margin: 0;
+	color: var(--text-normal);
+	font-size: var(--font-ui-medium);
+	font-weight: 590;
+	line-height: 1.55;
+}
+
+.knowledge-map-globe-remove-dialog__copy .knowledge-map-globe-remove-dialog__note {
+	margin-top: 5px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: 450;
+}
+
+.knowledge-map-globe-remove-dialog__actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 10px;
+	margin-top: 18px;
+}
+
+.knowledge-map-globe-remove-dialog__actions button {
+	min-width: 82px;
+	border-radius: 9px;
 }
 
 .knowledge-map-canvas-manager-modal .modal-content {

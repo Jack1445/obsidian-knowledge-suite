@@ -89,6 +89,16 @@ export function addGlobeCanvasNodes(
 	return { ...document, nodes: [...byPath.values()] };
 }
 
+export function removeGlobeCanvasNodes(
+	document: GlobeCanvasDocument,
+	nodeIds: ReadonlySet<string> | readonly string[],
+): GlobeCanvasDocument {
+	const ids = nodeIds instanceof Set ? nodeIds : new Set(nodeIds);
+	if (ids.size === 0) return document;
+	const nodes = document.nodes.filter((node) => !ids.has(node.id));
+	return nodes.length === document.nodes.length ? document : { ...document, nodes };
+}
+
 export function setGlobeCanvasNodePosition(
 	document: GlobeCanvasDocument,
 	nodeId: string,

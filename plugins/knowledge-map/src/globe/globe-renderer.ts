@@ -10,6 +10,14 @@ import {
 import { defaultLatLng, GLOBE_RADIUS, latLngToVec3, vec3ToLatLng } from './geo';
 import earthCloudsUrl from './textures/earth-clouds.jpg';
 import earthDayUrl from './textures/earth-day.jpg';
+import jupiterVoyagerUrl from './textures/jupiter-voyager.jpg';
+import marsVikingUrl from './textures/mars-viking.jpg';
+import mercuryMarinerUrl from './textures/mercury-mariner.jpg';
+import moonLroUrl from './textures/moon-lro-1280.jpg';
+import neptuneJplUrl from './textures/neptune-jpl.jpg';
+import saturnJplUrl from './textures/saturn-jpl.jpg';
+import uranusJplUrl from './textures/uranus-jpl.jpg';
+import venusMagellanUrl from './textures/venus-magellan.jpg';
 
 interface GlobeRendererOptions {
 	container: HTMLElement;
@@ -19,6 +27,7 @@ interface GlobeRendererOptions {
 	onNodeContextMenu: (node: MapNode, event: MouseEvent) => void;
 	onPositionChange: (nodeId: string, position: GlobePosition) => void;
 	onSizeChange: (nodeId: string, size: GlobeNodeSize) => void;
+	onSelectionChange: (nodeIds: readonly string[]) => void;
 }
 
 export interface GlobeRenderNode extends MapNode {
@@ -33,12 +42,19 @@ interface LabelEntry {
 	position: GlobePosition;
 }
 
+interface SolarSystemDecoration {
+	group: import('three').Group;
+	update: () => void;
+	dispose: () => void;
+}
+
 export class GlobeRenderer {
 	private disposed = false;
 	private stopAnimation: (() => void) | null = null;
 	private pointerToPosition: ((clientX: number, clientY: number) => GlobePosition | null) | null = null;
 	private focusNodeHandler: ((nodeId: string) => boolean) | null = null;
 	private updateAppearanceHandler: ((nodeId: string, appearance: KnowledgeCanvasNodeAppearance) => boolean) | null = null;
+	private spacePressed = false;
 
 	constructor(private readonly options: GlobeRendererOptions) {}
 
@@ -55,7 +71,7 @@ export class GlobeRenderer {
 		const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 		renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 		renderer.outputColorSpace = THREE.SRGBColorSpace;
-		renderer.setClearColor(new THREE.Color('#050817'), 0.7);
+		renderer.setClearColor(new THREE.Color('#01030a'), 0.58);
 
 		const textureLoader = new THREE.TextureLoader();
 		const dayTexture = textureLoader.load(earthDayUrl);
@@ -103,6 +119,9 @@ export class GlobeRenderer {
 		);
 		scene.add(atmosphere);
 
+		const solarSystem = this.createSolarSystem(THREE, textureLoader, renderer);
+		scene.add(solarSystem.group);
+
 		const stars = this.createStars(THREE);
 		scene.add(stars);
 		scene.add(new THREE.AmbientLight('#a7c7e7', 1.1));
@@ -125,6 +144,7 @@ export class GlobeRenderer {
 		const labels = this.options.nodes
 			.filter((node) => node.kind !== 'current-folder')
 			.map((node, index) => this.createLabel(node, index, labelsEl, controls, camera, globe, renderer, THREE));
+		const stopMarqueeSelection = this.setupMarqueeSelection(canvas, labels);
 		this.focusNodeHandler = (nodeId) => {
 			const label = labels.find((entry) => entry.node.id === nodeId);
 			if (!label) return false;
@@ -159,6 +179,8 @@ export class GlobeRenderer {
 			if (this.disposed) return;
 			controls.update();
 			clouds.rotation.y += 0.00008;
+			solarSystem.update();
+			stars.rotation.y += 0.000012;
 			this.positionLabels(labels, camera, this.options.container, THREE);
 			renderer.render(scene, camera);
 			animationFrame = window.requestAnimationFrame(animate);
@@ -169,6 +191,7 @@ export class GlobeRenderer {
 			this.pointerToPosition = null;
 			this.focusNodeHandler = null;
 			this.updateAppearanceHandler = null;
+			stopMarqueeSelection();
 			window.cancelAnimationFrame(animationFrame);
 			resizeObserver.disconnect();
 			controls.dispose();
@@ -182,7 +205,9 @@ export class GlobeRenderer {
 			(latitudeLines.material as InstanceType<typeof THREE.Material>).dispose();
 			atmosphere.geometry.dispose();
 			(atmosphere.material as InstanceType<typeof THREE.Material>).dispose();
+			solarSystem.dispose();
 			stars.geometry.dispose();
+			(stars.material as import('three').PointsMaterial).map?.dispose();
 			(stars.material as InstanceType<typeof THREE.Material>).dispose();
 			renderer.dispose();
 			canvas.remove();
@@ -208,6 +233,284 @@ export class GlobeRenderer {
 		return this.updateAppearanceHandler?.(nodeId, appearance) ?? false;
 	}
 
+	setSpacePressed(pressed: boolean): void {
+		this.spacePressed = pressed;
+		this.options.container.toggleClass('is-space-pressed', pressed);
+	}
+
+	private setupMarqueeSelection(canvas: HTMLCanvasElement, labels: readonly LabelEntry[]): () => void {
+		const selectionEl = this.options.container.createDiv({ cls: 'knowledge-map-globe__selection-box' });
+		let selecting = false;
+		let startX = 0;
+		let startY = 0;
+
+		const applySelection = (left: number, top: number, right: number, bottom: number): string[] => {
+			const selectedIds: string[] = [];
+			for (const label of labels) {
+				const rect = label.element.getBoundingClientRect();
+				const selected = !label.element.hasClass('is-hidden')
+					&& rect.right >= left
+					&& rect.left <= right
+					&& rect.bottom >= top
+					&& rect.top <= bottom;
+				label.element.toggleClass('is-selected', selected);
+				if (selected) selectedIds.push(label.node.id);
+			}
+			return selectedIds;
+		};
+
+		const move = (event: PointerEvent): void => {
+			if (!selecting) return;
+			const containerRect = this.options.container.getBoundingClientRect();
+			const currentX = Math.max(containerRect.left, Math.min(containerRect.right, event.clientX));
+			const currentY = Math.max(containerRect.top, Math.min(containerRect.bottom, event.clientY));
+			const left = Math.min(startX, currentX);
+			const top = Math.min(startY, currentY);
+			const right = Math.max(startX, currentX);
+			const bottom = Math.max(startY, currentY);
+			selectionEl.style.left = `${left - containerRect.left}px`;
+			selectionEl.style.top = `${top - containerRect.top}px`;
+			selectionEl.style.width = `${right - left}px`;
+			selectionEl.style.height = `${bottom - top}px`;
+			selectionEl.toggleClass('is-visible', right - left > 2 || bottom - top > 2);
+			applySelection(left, top, right, bottom);
+		};
+
+		const finish = (event: PointerEvent): void => {
+			if (!selecting) return;
+			move(event);
+			selecting = false;
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', finish);
+			this.options.container.removeClass('is-selecting');
+			selectionEl.removeClass('is-visible');
+			const selectedIds = labels
+				.filter((label) => label.element.hasClass('is-selected'))
+				.map((label) => label.node.id);
+			this.options.onSelectionChange(selectedIds);
+		};
+
+		const start = (event: PointerEvent): void => {
+			if (event.button !== 0 || this.spacePressed) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			selecting = true;
+			startX = event.clientX;
+			startY = event.clientY;
+			selectionEl.style.left = `${event.offsetX}px`;
+			selectionEl.style.top = `${event.offsetY}px`;
+			for (const label of labels) label.element.removeClass('is-selected');
+			this.options.container.addClass('is-selecting');
+			window.addEventListener('pointermove', move);
+			window.addEventListener('pointerup', finish);
+		};
+
+		canvas.addEventListener('pointerdown', start, true);
+		return () => {
+			canvas.removeEventListener('pointerdown', start, true);
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', finish);
+			selectionEl.remove();
+			this.options.container.removeClass('is-selecting', 'is-space-pressed');
+		};
+	}
+
+	private createSolarSystem(
+		THREE: typeof import('three'),
+		textureLoader: import('three').TextureLoader,
+		renderer: import('three').WebGLRenderer,
+	): SolarSystemDecoration {
+		const group = new THREE.Group();
+		const textures: import('three').Texture[] = [];
+		const geometries: import('three').BufferGeometry[] = [];
+		const materials: import('three').Material[] = [];
+		const rotating: Array<{ mesh: import('three').Object3D; speed: number }> = [];
+		const maxAnisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+		const loadTexture = (url: string): import('three').Texture => {
+			const texture = textureLoader.load(url);
+			texture.colorSpace = THREE.SRGBColorSpace;
+			texture.anisotropy = maxAnisotropy;
+			textures.push(texture);
+			return texture;
+		};
+		const addPlanet = (
+			url: string,
+			radius: number,
+			position: readonly [number, number, number],
+			rotation: readonly [number, number, number],
+			speed: number,
+			roughness = 0.92,
+		): import('three').Mesh => {
+			const geometry = new THREE.SphereGeometry(radius, 48, 32);
+			const material = new THREE.MeshStandardMaterial({
+				map: loadTexture(url),
+				roughness,
+				metalness: 0,
+			});
+			const mesh = new THREE.Mesh(geometry, material);
+			mesh.position.set(...position);
+			mesh.rotation.set(...rotation);
+			geometries.push(geometry);
+			materials.push(material);
+			rotating.push({ mesh, speed });
+			group.add(mesh);
+			return mesh;
+		};
+		const addAtmosphere = (
+			planet: import('three').Mesh,
+			radius: number,
+			color: string,
+			opacity: number,
+		): void => {
+			const geometry = new THREE.SphereGeometry(radius, 40, 28);
+			const material = new THREE.MeshBasicMaterial({
+				color,
+				transparent: true,
+				opacity,
+				side: THREE.BackSide,
+				depthWrite: false,
+				blending: THREE.AdditiveBlending,
+			});
+			const atmosphere = new THREE.Mesh(geometry, material);
+			atmosphere.position.copy(planet.position);
+			geometries.push(geometry);
+			materials.push(material);
+			group.add(atmosphere);
+		};
+
+		// NASA radius ratios and orbital distances are compressed non-linearly so the complete
+		// system remains legible around the interactive Earth while preserving real ordering.
+		const compressedRadius = (earthRadiusRatio: number): number => 0.18 + 0.33 * Math.sqrt(earthRadiusRatio);
+		const backgroundPlanetScale = 0.25;
+		const compressedDistance = (astronomicalUnits: number): number => 6.7 + 8.7 * Math.log1p(astronomicalUnits);
+		const atOrbitalDistance = (
+			astronomicalUnits: number,
+			direction: readonly [number, number, number],
+		): [number, number, number] => {
+			const length = Math.hypot(...direction);
+			const distance = compressedDistance(astronomicalUnits);
+			return direction.map((component) => (component / length) * distance) as [number, number, number];
+		};
+
+		addPlanet(moonLroUrl, 0.52, [-3.2, 1.1, -2.2], [0.08, -0.6, -0.08], 0.000025, 1);
+		addPlanet(
+			mercuryMarinerUrl,
+			compressedRadius(0.383) * backgroundPlanetScale,
+			atOrbitalDistance(0.387, [0.86, 0.38, -0.34]),
+			[0.04, 0.3, 0.02],
+			0.000018,
+			1,
+		);
+		const venusRadius = compressedRadius(0.949) * backgroundPlanetScale;
+		const venus = addPlanet(
+			venusMagellanUrl,
+			venusRadius,
+			atOrbitalDistance(0.723, [-0.72, -0.32, 0.62]),
+			[0.03, -0.5, 0.05],
+			-0.000012,
+			0.98,
+		);
+		addAtmosphere(venus, venusRadius * 1.065, '#e7bc76', 0.075);
+		const marsRadius = compressedRadius(0.532) * backgroundPlanetScale;
+		const mars = addPlanet(
+			marsVikingUrl,
+			marsRadius,
+			atOrbitalDistance(1.524, [0.25, 0.83, -0.5]),
+			[0.14, 0.7, 0.16],
+			0.000055,
+			0.96,
+		);
+		addAtmosphere(mars, marsRadius * 1.045, '#d88766', 0.05);
+		addPlanet(
+			jupiterVoyagerUrl,
+			compressedRadius(11.21) * backgroundPlanetScale,
+			atOrbitalDistance(5.203, [-0.58, 0.3, -0.76]),
+			[0.04, -0.2, -0.05],
+			0.00013,
+			0.86,
+		);
+		const saturnRadius = compressedRadius(9.45) * backgroundPlanetScale;
+		const saturn = addPlanet(
+			saturnJplUrl,
+			saturnRadius,
+			atOrbitalDistance(9.537, [0.66, -0.68, -0.32]),
+			[0.06, 0.4, 0.24],
+			0.00011,
+			0.88,
+		);
+		addPlanet(
+			uranusJplUrl,
+			compressedRadius(4.01) * backgroundPlanetScale,
+			atOrbitalDistance(19.19, [-0.26, 0.55, 0.79]),
+			[0.1, 0.2, 1.42],
+			-0.000075,
+			0.84,
+		);
+		addPlanet(
+			neptuneJplUrl,
+			compressedRadius(3.88) * backgroundPlanetScale,
+			atOrbitalDistance(30.07, [0.22, -0.78, -0.59]),
+			[0.12, -0.3, 0.46],
+			0.00008,
+			0.82,
+		);
+
+		const ringGeometry = new THREE.RingGeometry(saturnRadius * 1.24, saturnRadius * 2.23, 128);
+		const ringTexture = this.createSaturnRingTexture(THREE);
+		textures.push(ringTexture);
+		const ringMaterial = new THREE.MeshBasicMaterial({
+			map: ringTexture,
+			transparent: true,
+			opacity: 0.9,
+			side: THREE.DoubleSide,
+			depthWrite: false,
+		});
+		const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+		ring.position.copy(saturn.position);
+		ring.rotation.set(Math.PI * 0.44, 0.08, 0.27);
+		geometries.push(ringGeometry);
+		materials.push(ringMaterial);
+		group.add(ring);
+
+		return {
+			group,
+			update: () => {
+				for (const body of rotating) body.mesh.rotation.y += body.speed;
+			},
+			dispose: () => {
+				for (const geometry of geometries) geometry.dispose();
+				for (const material of materials) material.dispose();
+				for (const texture of textures) texture.dispose();
+				group.clear();
+			},
+		};
+	}
+
+	private createSaturnRingTexture(THREE: typeof import('three')): import('three').CanvasTexture {
+		const canvas = createEl('canvas');
+		canvas.width = 512;
+		canvas.height = 512;
+		const context = canvas.getContext('2d');
+		if (context) {
+			const gradient = context.createRadialGradient(256, 256, 0, 256, 256, 256);
+			gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+			gradient.addColorStop(0.53, 'rgba(255, 255, 255, 0)');
+			gradient.addColorStop(0.555, 'rgba(177, 155, 121, 0.34)');
+			gradient.addColorStop(0.61, 'rgba(232, 216, 183, 0.8)');
+			gradient.addColorStop(0.67, 'rgba(154, 136, 108, 0.52)');
+			gradient.addColorStop(0.72, 'rgba(42, 35, 29, 0.16)');
+			gradient.addColorStop(0.75, 'rgba(232, 218, 187, 0.86)');
+			gradient.addColorStop(0.82, 'rgba(185, 164, 130, 0.64)');
+			gradient.addColorStop(0.91, 'rgba(228, 211, 178, 0.46)');
+			gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+			context.fillStyle = gradient;
+			context.fillRect(0, 0, 512, 512);
+		}
+		const texture = new THREE.CanvasTexture(canvas);
+		texture.colorSpace = THREE.SRGBColorSpace;
+		return texture;
+	}
+
 	private createStars(THREE: typeof import('three')): import('three').Points {
 		const points: number[] = [];
 		const colors: number[] = [];
@@ -230,13 +533,35 @@ export class GlobeRenderer {
 		return new THREE.Points(
 			geometry,
 			new THREE.PointsMaterial({
-				size: 0.065,
+				size: 0.105,
+				map: this.createStarTexture(THREE),
 				transparent: true,
-				opacity: 0.92,
+				opacity: 0.88,
 				vertexColors: true,
 				depthWrite: false,
+				alphaTest: 0.025,
+				blending: THREE.AdditiveBlending,
 			}),
 		);
+	}
+
+	private createStarTexture(THREE: typeof import('three')): import('three').CanvasTexture {
+		const canvas = createEl('canvas');
+		canvas.width = 64;
+		canvas.height = 64;
+		const context = canvas.getContext('2d');
+		if (context) {
+			const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 31);
+			gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+			gradient.addColorStop(0.12, 'rgba(255, 255, 255, 0.96)');
+			gradient.addColorStop(0.34, 'rgba(205, 225, 255, 0.48)');
+			gradient.addColorStop(1, 'rgba(155, 195, 255, 0)');
+			context.fillStyle = gradient;
+			context.fillRect(0, 0, 64, 64);
+		}
+		const texture = new THREE.CanvasTexture(canvas);
+		texture.colorSpace = THREE.SRGBColorSpace;
+		return texture;
 	}
 
 	private createLabel(

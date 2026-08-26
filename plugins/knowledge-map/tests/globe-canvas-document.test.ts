@@ -3,6 +3,7 @@ import {
 	addGlobeCanvasNodes,
 	createEmptyGlobeCanvasDocument,
 	parseGlobeCanvasDocument,
+	removeGlobeCanvasNodes,
 	serializeGlobeCanvasDocument,
 	setGlobeCanvasNodeAppearance,
 	setGlobeCanvasNodePosition,
@@ -33,6 +34,26 @@ describe('3d canvas document', () => {
 
 		expect(setGlobeCanvasNodePosition(document, 'folder:Projects', { lat: 20, lng: 30 })
 			.nodes[0]?.position).toEqual({ lat: 20, lng: 30 });
+	});
+
+	it('removes one or more nodes without touching the remaining nodes', () => {
+		const document = addGlobeCanvasNodes(createEmptyGlobeCanvasDocument(), [{
+			id: 'folder:Projects',
+			kind: 'folder',
+			path: 'Projects',
+			label: 'Projects',
+			position: { lat: 0, lng: 0 },
+		}, {
+			id: 'note:Notes/Alpha.md',
+			kind: 'note',
+			path: 'Notes/Alpha.md',
+			label: 'Alpha',
+			position: { lat: 20, lng: 30 },
+		}]);
+
+		const updated = removeGlobeCanvasNodes(document, ['folder:Projects']);
+		expect(updated.nodes).toEqual([document.nodes[1]]);
+		expect(removeGlobeCanvasNodes(updated, [])).toBe(updated);
 	});
 
 	it('recovers safely from invalid file contents', () => {

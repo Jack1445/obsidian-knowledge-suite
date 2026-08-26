@@ -1,7 +1,6 @@
 import {
 	Menu,
 	Notice,
-	setIcon,
 	TAbstractFile,
 	TFile,
 	TFolder,
@@ -14,6 +13,7 @@ import {
 	addGlobeCanvasNodes,
 	createEmptyGlobeCanvasDocument,
 	parseGlobeCanvasDocument,
+	removeGlobeCanvasNodes,
 	serializeGlobeCanvasDocument,
 	setGlobeCanvasNodeAppearance,
 	setGlobeCanvasNodePosition,
@@ -28,6 +28,7 @@ import {
 } from '../integrations/knowledge-canvas-model';
 import { CustomNodeColorDialog } from '../ui/custom-node-color-dialog';
 import { ManagedNodeIconDialog } from '../ui/managed-node-icon-dialog';
+import { GlobeNodeRemoveDialog } from '../ui/globe-node-remove-dialog';
 
 export const KNOWLEDGE_MAP_GLOBE_VIEW_TYPE = 'knowledge-map-globe-view';
 
@@ -60,8 +61,8 @@ const GLOBE_NODE_SHAPES: readonly { id: KnowledgeCanvasNodeShape; label: string 
 export class GlobeView extends TextFileView {
 	private document = createEmptyGlobeCanvasDocument();
 	private renderer: GlobeRenderer | null = null;
-	private titleEl!: HTMLElement;
 	private globeEl!: HTMLElement;
+	private selectedNodeIds = new Set<string>();
 
 	constructor(leaf: WorkspaceLeaf, private readonly plugin: KnowledgeMapPlugin) {
 		super(leaf);
@@ -82,22 +83,6 @@ export class GlobeView extends TextFileView {
 	async onOpen(): Promise<void> {
 		this.contentEl.empty();
 		this.contentEl.addClass('knowledge-map-globe');
-		const toolbar = this.contentEl.createDiv({ cls: 'knowledge-map-globe__toolbar' });
-		const back = toolbar.createEl('button', {
-			cls: 'clickable-icon',
-			attr: { 'aria-label': '返回父画布' },
-		});
-		setIcon(back, 'arrow-left');
-		back.addEventListener('click', () => {
-			if (this.file) void this.plugin.openParentCanvas(this.file.path);
-		});
-		this.titleEl = toolbar.createDiv({ cls: 'knowledge-map-globe__title' });
-		const manage = toolbar.createEl('button', { text: '创建子画布' });
-		manage.addEventListener('click', () => {
-			if (!this.file) return;
-			const state = this.plugin.store.getKnowledgeCanvas(this.file.path);
-			this.plugin.openCanvasManager(state?.folderPath ?? '/', this.file.path);
-		});
 		this.globeEl = this.contentEl.createDiv({ cls: 'knowledge-map-globe__stage' });
 		this.registerDomEvent(this.globeEl, 'dragenter', (event) => this.handleDragOver(event));
 		this.registerDomEvent(this.globeEl, 'dragover', (event) => this.handleDragOver(event));
@@ -107,10 +92,14 @@ export class GlobeView extends TextFileView {
 			}
 		});
 		this.registerDomEvent(this.globeEl, 'drop', (event) => this.handleDrop(event));
+		this.registerDomEvent(document, 'keydown', (event) => this.handleKeyDown(event));
+		this.registerDomEvent(document, 'keyup', (event) => this.handleKeyUp(event));
+		this.registerDomEvent(window, 'blur', () => this.renderer?.setSpacePressed(false));
 		this.renderGlobe();
 	}
 
 	async onClose(): Promise<void> {
+		this.renderer?.setSpacePressed(false);
 		this.renderer?.destroy();
 		await super.onClose();
 	}
@@ -143,7 +132,7 @@ export class GlobeView extends TextFileView {
 		if (!this.globeEl) return;
 		this.renderer?.destroy();
 		this.globeEl.empty();
-		this.titleEl?.setText(this.file?.basename ?? '3维画布');
+		this.selectedNodeIds.clear();
 		const validNodes = this.document.nodes.filter((node) => {
 			return this.app.vault.getAbstractFileByPath(node.path) instanceof TAbstractFile;
 		});
@@ -181,12 +170,19 @@ export class GlobeView extends TextFileView {
 				this.document = setGlobeCanvasNodeSize(this.document, nodeId, size);
 				this.queueDocumentSave();
 			},
+			onSelectionChange: (nodeIds) => {
+				this.selectedNodeIds = new Set(nodeIds);
+			},
 		});
 		const empty = this.globeEl.createDiv({
 			cls: 'knowledge-map-globe__empty',
 			text: '将仓库中的文件或文件夹拖到地球表面',
 		});
 		empty.toggleClass('is-hidden', validNodes.length > 0);
+		this.globeEl.createDiv({
+			cls: 'knowledge-map-globe__interaction-hint',
+			text: '空格+左键旋转地图',
+		});
 		void this.renderer.mount().catch(() => {
 			new Notice('3维画布无法启动，请检查 webgl 支持和开发者控制台。');
 		});
@@ -323,7 +319,59 @@ export class GlobeView extends TextFileView {
 		if (target instanceof TFile && !canvasState) {
 			this.app.workspace.trigger('file-menu', menu, target, 'knowledge-globe');
 		}
+		menu.addSeparator();
+		menu.addItem((item) => item
+			.setTitle('从本画布移除')
+			.setIcon('trash-2')
+			.setSection('knowledge-map-remove')
+			.onClick(() => this.confirmNodeRemoval(node)));
 		menu.showAtMouseEvent(event);
+	}
+
+	private confirmNodeRemoval(node: GlobeCanvasNode): void {
+		new GlobeNodeRemoveDialog(this.app, [node.label], () => {
+			this.removeNodesFromCanvas([node.id]);
+		}).open();
+	}
+
+	private removeNodesFromCanvas(nodeIds: readonly string[]): void {
+		const ids = new Set(nodeIds);
+		const removed = this.document.nodes.filter((node) => ids.has(node.id));
+		if (removed.length === 0) return;
+		this.document = removeGlobeCanvasNodes(this.document, ids);
+		this.selectedNodeIds.clear();
+		this.queueDocumentSave();
+		this.renderGlobe();
+		new Notice(removed.length === 1
+			? '已从当前3维画布移除节点，仓库中的源内容未删除。'
+			: `已从当前3维画布移除 ${removed.length} 个节点，仓库中的源内容均未删除。`);
+	}
+
+	private handleKeyDown(event: KeyboardEvent): void {
+		if (!this.isActiveGlobeView() || this.isTextEntryTarget(event.target)) return;
+		if (event.code === 'Space') {
+			event.preventDefault();
+			this.renderer?.setSpacePressed(true);
+			return;
+		}
+		if (event.key !== 'Backspace' && event.key !== 'Delete' || this.selectedNodeIds.size === 0) return;
+		event.preventDefault();
+		this.removeNodesFromCanvas([...this.selectedNodeIds]);
+	}
+
+	private handleKeyUp(event: KeyboardEvent): void {
+		if (event.code !== 'Space') return;
+		this.renderer?.setSpacePressed(false);
+	}
+
+	private isActiveGlobeView(): boolean {
+		return this.app.workspace.getActiveViewOfType(GlobeView) === this;
+	}
+
+	private isTextEntryTarget(target: EventTarget | null): boolean {
+		return target instanceof HTMLElement && Boolean(target.closest(
+			'input, textarea, [contenteditable="true"], .modal-container',
+		));
 	}
 
 	private setCanvasChildRelationship(targetPath: string, isChild: boolean): void {
