@@ -2,6 +2,16 @@
 
 All notable changes to Knowledge Map are documented here. Each tested GitHub checkpoint includes a short user-facing summary.
 
+## 0.2.0 - 2026-08-26
+
+- Added persistent 2D/3D canvas files, structural parent-child relationships, Back navigation, and independent references.
+- Added an infinitely nestable Canvas tree with reference folders, direction indicators, file operations, and remembered drag order.
+- Added precise, localized context menus for canvases, folders, files, and ordinary Excalidraw elements.
+- Added persistent node colors, shapes, custom palettes, Lucide icons, Emoji icons, and compact visual-layer controls.
+- Reworked the 3D canvas with a star field, readable managed nodes, direct menus, and resizing from all four edges.
+- Added a 2D/3D type chooser for folders opened from a 3D canvas, including explicit empty/existing-state guidance.
+- Preserved references when structural child relationships are removed and prevented reversed or duplicate hierarchy entries.
+
 ## Stage 0 accepted baseline - 2026-08-24
 
 This GitHub checkpoint freezes the version accepted in Obsidian before the context-menu redesign begins.

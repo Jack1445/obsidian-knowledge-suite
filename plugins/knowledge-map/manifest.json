@@ -1,7 +1,7 @@
 {
   "id": "knowledge-map",
   "name": "Knowledge Map",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.7.2",
   "description": "以持久化的可视化画布浏览文件夹与关联笔记。",
   "author": "Jack1445",

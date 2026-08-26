@@ -1,6 +1,6 @@
 # Known issues
 
-## Fixed in source — pending release QA
+## Resolved in v1.1.0
 
 ### BUG-001 — Inline-formula suffix text hidden while editing
 

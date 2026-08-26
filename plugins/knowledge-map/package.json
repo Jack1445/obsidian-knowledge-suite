@@ -1,6 +1,6 @@
 {
   "name": "obsidian-knowledge-map",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A folder-aware, persistent knowledge map for Obsidian.",
   "main": "main.js",
   "type": "module",
