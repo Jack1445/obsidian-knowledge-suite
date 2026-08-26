@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1 - 2026-08-26
+
+- Added marquee selection to the 3D canvas while keeping direct node clicks focused on opening their targets.
+- Added Backspace/Delete removal for selected 3D nodes and a confirmed “remove from this canvas” context-menu action that never deletes source files.
+- Changed globe rotation to Space + left drag and simplified the in-canvas interaction hint.
+- Removed redundant 3D canvas title, back button, and child-canvas button from the plugin view.
+- Deepened the space background and added a textured 3D Moon plus smaller, widely distributed planetary scenery.
+- Added offline planetary textures with third-party source notices.
+
 ## 1.1.0 - 2026-08-26
 
 - Added independent persistent 2D and 3D canvases with explicit parent-child relationships and reliable Back navigation.
