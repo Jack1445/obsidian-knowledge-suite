@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.2 - 2026-08-27
+
+- Added independently configurable commands for inserting standalone and inline LaTeX formulas in 2D canvases.
+- Reused the shared local formula editor for standalone formula creation and editing, with an empty initial value and automatic input focus.
+- Preserved standalone formula sizing when editing existing formulas.
+- Replaced the Excalidraw Extras dependency in normal formula creation, editing, save, and reload flows with the bundled local SVG renderer.
+- Fixed the Excalidraw Extras installation prompt appearing after saving a canvas containing locally created formulas.
+
 ## 1.1.1 - 2026-08-26
 
 - Added marquee selection to the 3D canvas while keeping direct node clicks focused on opening their targets.
