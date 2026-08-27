@@ -217,6 +217,7 @@ export class KnowledgeFormulaDialog {
 		this.textarea = editor.createEl('textarea', { cls: 'knowledge-map-formula-input' });
 		this.textarea.rows = 3;
 		this.textarea.spellcheck = false;
+		this.textarea.autofocus = true;
 		this.textarea.placeholder = '输入 LaTeX，例如 a + b\\sigma、\\frac{a}{b}、\\sum_{i=1}^{n}';
 		this.textarea.value = this.options.initialLatex;
 
@@ -237,12 +238,17 @@ export class KnowledgeFormulaDialog {
 		this.textarea.addEventListener('keydown', (event) => this.onKeyDown(event));
 
 		this.update();
-		window.setTimeout(() => {
-			this.textarea?.focus();
-			this.textarea?.setSelectionRange(this.textarea.value.length, this.textarea.value.length);
+		const view = document.defaultView ?? window;
+		const focusInput = (): void => {
+			if (this.closed || !this.textarea) return;
+			this.textarea.focus({ preventScroll: true });
+			const end = this.textarea.value.length;
+			this.textarea.setSelectionRange(end, end);
 			this.update();
 			this.syncScroll();
-		}, 0);
+		};
+		view.requestAnimationFrame(focusInput);
+		view.setTimeout(focusInput, 80);
 	}
 
 	private positionPanel(): void {

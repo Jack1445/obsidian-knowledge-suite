@@ -92,6 +92,8 @@ import type App from "../components/App";
 import type { AppState } from "../types";
 import { attachInlineLinkSuggester } from "../obsidianUtils";
 
+const INLINE_FORMULA_COMMAND_EVENT = "excalidraw-insert-inline-formula";
+
 const getTransform = (
   width: number,
   height: number,
@@ -1010,6 +1012,14 @@ export const textWysiwyg = ({
 
   const onInlineBoldToggle = () => toggleInlineBoldSelection();
   editable.addEventListener(INLINE_BOLD_TOGGLE_EVENT, onInlineBoldToggle);
+  const onInlineFormulaCommand = () => {
+    editable.focus();
+    app.actionManager.executeAction(actionInsertInlineFormula, "api", null);
+  };
+  editable.addEventListener(
+    INLINE_FORMULA_COMMAND_EVENT,
+    onInlineFormulaCommand,
+  );
   const onInlineTextSelectionChange = () => {
     if (
       inlineSelectionDrag ||
@@ -1451,6 +1461,10 @@ export const textWysiwyg = ({
     editable.oninput = null;
     editable.onkeydown = null;
     editable.removeEventListener(INLINE_BOLD_TOGGLE_EVENT, onInlineBoldToggle);
+    editable.removeEventListener(
+      INLINE_FORMULA_COMMAND_EVENT,
+      onInlineFormulaCommand,
+    );
     editable.ownerDocument.removeEventListener(
       "selectionchange",
       onInlineTextSelectionChange,

@@ -5,6 +5,7 @@ import { FileData, MimeType } from "src/types/embeddedFileLoaderTypes";
 import { FileId } from "@zsviczian/excalidraw/types/element/src/types";
 import ExcalidrawPlugin from "src/core/main";
 import type { ExcalidrawExtrasAPI } from "@zsviczian/excalidraw-extras-api";
+import { fileid } from "src/constants/constants";
 
 export const updateEquation = async (
   equation: string,
@@ -40,6 +41,17 @@ export async function tex2dataURL(
   created: number;
   size: { height: number; width: number };
 } | null> {
+  const localRender = await plugin.renderInlineFormula(tex);
+  if (localRender) {
+    return {
+      mimeType: "image/svg+xml" as MimeType,
+      fileId: fileid() as FileId,
+      dataURL: localRender.dataURL as DataURL,
+      created: Date.now(),
+      size: { width: localRender.width, height: localRender.height },
+    };
+  }
+
   // 1. Ask the gateway to verify the Extras plugin and return the MathJax API
   const mathjaxAPI = await plugin.extrasGateway.getMathJax();
 

@@ -2075,6 +2075,29 @@ export default class ExcalidrawPlugin extends Plugin {
     }
   }
 
+  public async renderInlineFormula(latex: string): Promise<{
+    dataURL: string;
+    width: number;
+    height: number;
+  } | null> {
+    try {
+      const knowledgeMap = this.app.plugins.plugins["knowledge-map"] as
+        | (Plugin & {
+            renderInlineFormula?: (latex: string) => Promise<{
+              dataURL: string;
+              width: number;
+              height: number;
+            } | null>;
+          })
+        | undefined;
+      return knowledgeMap?.renderInlineFormula
+        ? await knowledgeMap.renderInlineFormula(latex)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
   //used by obsidianUtils in the Excalidraw Pacakge
   //aweful coding, but does the job
   public getLabel(key: keyof typeof en): string {

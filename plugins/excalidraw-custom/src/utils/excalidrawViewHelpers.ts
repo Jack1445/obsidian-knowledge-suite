@@ -2,6 +2,7 @@ import type {
   ExcalidrawElement,
   ExcalidrawImageElement,
 } from "@zsviczian/excalidraw/types/element/src/types";
+import type { DataURL } from "@zsviczian/excalidraw/types/excalidraw/types";
 import type { Mutable } from "@zsviczian/excalidraw/types/common/src/utility-types";
 import { getCommonBoundingBox, restoreElements } from "src/constants/constants";
 import { getEA } from "src/core";
@@ -63,65 +64,47 @@ export const insertLaTeXToView = (
   view: ExcalidrawView,
   center: boolean = false,
 ) => {
-  const app = view.plugin.app;
   const ea = getEA(view);
-
-  void import("src/shared/Dialogs/Prompt").then(({ LaTexPrompt }) => {
-    LaTexPrompt.Prompt(
-      view.plugin,
-      app,
-      t("ENTER_LATEX"),
-      view.plugin.settings.latexBoilerplate,
-    ).then(
-      async (formula: string) => {
-        const lastLatexEl = ea
-          .getViewElements()
-          .filter(
-            (el) =>
-              el.type === "image" && view.excalidrawData.hasEquation(el.fileId),
-          )
-          .reduce(
-            (maxel, curr) =>
-              !maxel || curr.updated > maxel.updated ? curr : maxel,
-            undefined,
-          ) as ExcalidrawImageElement;
-
-        let scaleX = 1;
-        let scaleY = 1;
-
-        if (lastLatexEl) {
-          const equation = view.excalidrawData.getEquation(lastLatexEl.fileId);
-          const dataurl = await ea.tex2dataURL(equation.latex);
-          if (dataurl && dataurl.size.width > 0 && dataurl.size.height > 0) {
-            scaleX = lastLatexEl.width / dataurl.size.width;
-            scaleY = lastLatexEl.height / dataurl.size.height;
-          }
-        }
-
-        if (formula) {
-          const id = await ea.addLaTex(0, 0, formula, scaleX, scaleY);
-          if (center) {
-            const el = ea.getElement(id);
-            if (el) {
-              const { width, height } = el;
-              const { x, y } = ea.getViewCenterPosition();
-              el.x = x - width / 2;
-              el.y = y - height / 2;
-            }
-          }
-          await ea.addElementsToView(!center, false, true);
-          ea.selectElementsInView([id]);
-        }
-        ea.destroy();
-      },
-      (e: unknown) => {
-        // Promise rejection handler (e.g. user cancelled prompt or Extras plugin is missing)
-        if (e && e instanceof Error) {
-          errorlog({ message: "LaTeX Insertion aborted", error: e });
-        }
-      },
-    );
-  });
+  void view.plugin
+    .editInlineFormula("")
+    .then(async (rendered) => {
+      if (!rendered) {
+        return;
+      }
+      const id = await ea.addImage(0, 0, rendered.dataURL, false, false);
+      if (!id) {
+        return;
+      }
+      const element = ea.getElement(id) as Mutable<ExcalidrawImageElement>;
+      if (!element) {
+        return;
+      }
+      element.width = rendered.width;
+      element.height = rendered.height;
+      const image = ea.imagesDict[element.fileId];
+      if (image) {
+        image.dataURL = rendered.dataURL as DataURL;
+        image.latex = rendered.latex;
+        image.size = { width: rendered.width, height: rendered.height };
+      }
+      ea.addAppendUpdateCustomData(id, {
+        latex: rendered.latex,
+        latexscale: { scaleX: 1, scaleY: 1 },
+      });
+      if (center) {
+        const { x, y } = ea.getViewCenterPosition();
+        element.x = x - element.width / 2;
+        element.y = y - element.height / 2;
+      }
+      await ea.addElementsToView(!center, false, true);
+      ea.selectElementsInView([id]);
+    })
+    .catch((error: unknown) => {
+      if (error instanceof Error) {
+        errorlog({ message: "LaTeX insertion aborted", error });
+      }
+    })
+    .finally(() => ea.destroy());
 };
 
 export const search = async (view: ExcalidrawView) => {

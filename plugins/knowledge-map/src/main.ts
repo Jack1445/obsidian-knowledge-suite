@@ -260,6 +260,16 @@ export default class KnowledgeMapPlugin extends Plugin {
 		});
 	}
 
+	async renderInlineFormula(latex: string): Promise<{
+		dataURL: string;
+		width: number;
+		height: number;
+	} | null> {
+		const normalized = latex.trim();
+		if (!normalized) return null;
+		return renderLatexToSvg(normalized, this.app.workspace.containerEl.ownerDocument);
+	}
+
 	async activateView(folderPath = '/'): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(KNOWLEDGE_MAP_VIEW_TYPE)[0];
 		let leaf: WorkspaceLeaf;

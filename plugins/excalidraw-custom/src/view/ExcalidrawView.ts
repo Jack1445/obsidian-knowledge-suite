@@ -117,6 +117,7 @@ import {
   checkVersionMismatch,
   calculateUIModeValue,
   getExportInternalLinks,
+  getImageSize,
 } from "../utils/utils";
 import type {
   ExcalidrawImageWithCustomData,
@@ -139,7 +140,6 @@ import {
 import { splitFolderAndFilename } from "../utils/fileUtils";
 import {
   GenericInputPrompt,
-  LaTexPrompt,
   MultiOptionConfirmationPrompt,
   NewFileActions,
   linkPrompt,
@@ -148,7 +148,6 @@ import {
   ClipboardData,
   ParsedDataTransferFile,
 } from "@zsviczian/excalidraw/types/excalidraw/clipboard";
-import { updateEquation } from "../shared/LaTeX";
 import {
   EmbeddedFile,
   EmbeddedFilesLoader,
@@ -1470,38 +1469,49 @@ export default class ExcalidrawView
       }
     }
 
-    LaTexPrompt.Prompt(this.plugin, this.app, t("ENTER_LATEX"), equation).then(
-      (formula: string) => {
-        void (async () => {
-          if (!formula || formula === equation) {
-            return;
-          }
-          this.excalidrawData.setEquation(fileId, {
-            latex: formula,
-            isLoaded: false,
-          });
-          const ea = getEA(this);
-          ea.copyViewElementsToEAforEditing([el]);
-          ea.addAppendUpdateCustomData(el.id, { latex: formula });
-          const dataurl = await ea.tex2dataURL(equation);
-          if (dataurl && dataurl.size.height > 0 && dataurl.size.width > 0) {
-            ea.addAppendUpdateCustomData(el.id, {
-              latexscale: {
-                scaleX: el.width / dataurl.size.width,
-                scaleY: el.height / dataurl.size.height,
-              },
-            });
-          }
-          await ea.addElementsToView(false, false, false, false);
-          await this.save(false);
-          await updateEquation(formula, fileId, this, (files, view) => {
-            void addFiles(files, view);
-          });
-          this.setDirty();
-        })();
-      },
-      () => {},
-    );
+    const rendered = await this.plugin.editInlineFormula(equation);
+    if (!rendered || rendered.latex === equation) {
+      return;
+    }
+
+    let naturalSize = { width: el.width, height: el.height };
+    const currentFile = this.excalidrawAPI?.getFiles()[fileId];
+    if (currentFile) {
+      try {
+        naturalSize = await getImageSize(currentFile.dataURL);
+      } catch {
+        // Keep the current element size as a safe scale baseline.
+      }
+    }
+    const scaleX = el.width / Math.max(1, naturalSize.width);
+    const scaleY = el.height / Math.max(1, naturalSize.height);
+    const ea = getEA(this);
+    try {
+      ea.copyViewElementsToEAforEditing([el], true);
+      const editable = ea.getElement(el.id) as Mutable<ExcalidrawImageElement>;
+      const image = ea.imagesDict[fileId];
+      if (!editable || !image) {
+        return;
+      }
+      editable.width = rendered.width * scaleX;
+      editable.height = rendered.height * scaleY;
+      image.dataURL = rendered.dataURL as DataURL;
+      image.latex = rendered.latex;
+      image.size = { width: rendered.width, height: rendered.height };
+      ea.addAppendUpdateCustomData(el.id, {
+        latex: rendered.latex,
+        latexscale: { scaleX, scaleY },
+      });
+      this.excalidrawData.setEquation(fileId, {
+        latex: rendered.latex,
+        isLoaded: true,
+      });
+      await ea.addElementsToView(false, false, false, false);
+      await this.save(false);
+      this.setDirty();
+    } finally {
+      ea.destroy();
+    }
   }
 
   async openEmbeddedLinkEditor(imgId: string) {

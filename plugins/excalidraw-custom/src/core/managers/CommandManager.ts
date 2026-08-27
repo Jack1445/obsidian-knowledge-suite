@@ -96,6 +96,8 @@ import { isMarkdownImageElement } from "src/shared/MarkdownImage";
 
 declare const PLUGIN_VERSION: string;
 
+const INLINE_FORMULA_COMMAND_EVENT = "excalidraw-insert-inline-formula";
+
 export class CommandManager {
   private app: App;
   private plugin: ExcalidrawPlugin;
@@ -2449,6 +2451,35 @@ export class CommandManager {
           return true;
         }
         return false;
+      },
+    });
+
+    this.addCommand({
+      id: "insert-inline-LaTeX-at-text-cursor",
+      name: t("INSERT_INLINE_LATEX"),
+      checkCallback: (checking: boolean) => {
+        const view = this.app.workspace.getActiveViewOfType(ExcalidrawView);
+        const editingTextElement =
+          view?.excalidrawAPI?.getAppState().editingTextElement;
+        const editor = view?.containerEl.querySelector<HTMLTextAreaElement>(
+          ".excalidraw-wysiwyg",
+        );
+        const editorWindow = editor?.ownerDocument.defaultView;
+        if (
+          !view ||
+          !editingTextElement ||
+          editingTextElement.containerId ||
+          !editor ||
+          !editorWindow
+        ) {
+          return false;
+        }
+        if (!checking) {
+          editor.dispatchEvent(
+            new editorWindow.CustomEvent(INLINE_FORMULA_COMMAND_EVENT),
+          );
+        }
+        return true;
       },
     });
 
