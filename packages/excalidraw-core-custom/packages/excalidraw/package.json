@@ -1,0 +1,189 @@
+{
+  "name": "@zsviczian/excalidraw",
+  "version": "0.18.118",
+  "main": "main.js",
+  "module": "./dist/prod/index.js",
+  "source": "./index.tsx",
+  "types": "types/excalidraw/index.d.ts",
+  "exports": {
+    "./common/*": {
+      "types": "./dist/types/common/src/*.d.ts"
+    },
+    "./element/*": {
+      "types": "./dist/types/element/src/*.d.ts"
+    },
+    "./math/*": {
+      "types": "./dist/types/math/src/*.d.ts"
+    },
+    "./utils/*": {
+      "types": "./dist/types/utils/src/*.d.ts"
+    },
+    "./*": {
+      "types": "./dist/types/excalidraw/*.d.ts"
+    },
+    "./index.css": {
+      "development": "./dist/dev/index.css",
+      "production": "./dist/prod/index.css"
+    },
+    ".": {
+      "types": "./dist/types/excalidraw/index.d.ts",
+      "development": "./dist/dev/index.js",
+      "production": "./dist/prod/index.js",
+      "default": "./dist/prod/index.js",
+      "require": "./main.js"
+    }
+  },
+  "files": [
+    "dist/*",
+    "types/*"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "description": "Excalidraw as a React component",
+  "license": "MIT",
+  "keywords": [
+    "excalidraw",
+    "excalidraw-embed",
+    "react",
+    "npm",
+    "npm excalidraw"
+  ],
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not ie <= 11",
+      "not op_mini all",
+      "not safari < 12",
+      "not kaios <= 2.5",
+      "not edge < 79",
+      "not chrome < 70",
+      "not and_uc < 13",
+      "not samsung < 10"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "bugs": "https://github.com/excalidraw/excalidraw/issues",
+  "homepage": "https://github.com/excalidraw/excalidraw/tree/master/packages/excalidraw",
+  "peerDependencies": {
+    "react": "^17.0.2 || ^18.2.0 || ^19.0.0",
+    "react-dom": "^17.0.2 || ^18.2.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@braintree/sanitize-url": "6.0.2",
+    "@codemirror/commands": "^6.0.0",
+    "@codemirror/language": "^6.0.0",
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0",
+    "@lezer/highlight": "^1.0.0",
+    "@excalidraw/laser-pointer": "1.3.1",
+    "@excalidraw/random-username": "1.1.0",
+    "browser-fs-access": "0.38.0",
+    "canvas-roundrect-polyfill": "0.0.1",
+    "clsx": "1.1.1",
+    "es6-promise-pool": "2.5.0",
+    "fuzzy": "0.1.3",
+    "image-blob-reduce": "3.0.1",
+    "jotai": "2.11.0",
+    "jotai-scope": "0.7.2",
+    "lodash.debounce": "4.0.8",
+    "lodash.throttle": "4.1.1",
+    "nanoid": "^5.1.11",
+    "pako": "2.0.3",
+    "perfect-freehand": "1.2.0",
+    "pica": "7.1.1",
+    "png-chunk-text": "1.0.0",
+    "png-chunks-encode": "1.0.0",
+    "png-chunks-extract": "1.0.0",
+    "points-on-curve": "1.0.1",
+    "pwacompat": "2.0.17",
+    "radix-ui": "1.4.3",
+    "roughjs": "4.6.4",
+    "sass": "1.51.0",
+    "tunnel-rat": "0.1.2"
+  },
+  "devDependencies": {
+    "@excalidraw/mermaid-to-excalidraw": "2.2.2",
+    "@size-limit/preset-big-lib": "9.0.0",
+    "@testing-library/dom": "10.4.0",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.2.0",
+    "@types/lodash.debounce": "4.0.8",
+    "@types/pako": "2.0.3",
+    "@types/pica": "5.1.3",
+    "@types/resize-observer-browser": "0.1.7",
+    "ansicolor": "2.0.3",
+    "autoprefixer": "10.4.7",
+    "cross-env": "7.0.3",
+    "dotenv": "16.0.1",
+    "esbuild": "0.19.10",
+    "esbuild-sass-plugin": "2.16.0",
+    "eslint-plugin-react": "^7.37.4",
+    "fake-indexeddb": "3.1.7",
+    "fonteditor-core": "2.4.1",
+    "harfbuzzjs": "0.3.6",
+    "jest-diff": "29.7.0",
+    "mini-css-extract-plugin": "2.6.1",
+    "postcss-loader": "7.0.1",
+    "sass-loader": "13.0.2",
+    "size-limit": "9.0.0",
+    "style-loader": "3.3.3",
+    "ts-loader": "9.3.1",
+    "typescript": "5.9.3",
+    "rimraf": "^5.0.5",
+    "webpack": "^5.98.0",
+    "terser-webpack-plugin": "5.3.3",
+    "webpack-bundle-analyzer": "4.5.0",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.0",
+    "webpack-merge": "^6.0.1",
+    "copy-webpack-plugin": "12.0.2",
+    "import-meta-loader": "1.1.0",
+    "@babel/core": "^7.26.9",
+    "@babel/plugin-transform-arrow-functions": "^7.25.9",
+    "@babel/plugin-transform-async-to-generator": "^7.25.9",
+    "@babel/plugin-transform-runtime": "^7.26.9",
+    "@babel/plugin-transform-typescript": "^7.26.8",
+    "@babel/plugin-transform-class-properties": "^7.25.9",
+    "@babel/preset-env": "^7.26.9",
+    "@babel/preset-react": "^7.26.3",
+    "@babel/preset-typescript": "^7.26.0",
+    "babel-loader": "^10.0.0",
+    "babel-plugin-transform-class-properties": "^6.24.1",
+    "css-loader": "^7.1.2",
+    "esbuild-plugin-external-global": "^1.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zsviczian/excalidraw.git"
+  },
+  "resolutions": {
+    "strip-ansi": "^7.0.1",
+    "//lodash": "Addresses https://github.com/advisories/GHSA-f23m-r3pf-42rh based on Obsidian scanner results",
+    "lodash": "^4.18.1",
+    "lodash-es": "^4.18.1",
+    "nanoid": "^5.1.11"
+  },
+  "overrides": {
+    "lodash": "^4.18.1",
+    "lodash-es": "^4.18.1",
+    "serialize-javascript": "^7.0.5",
+    "nanoid": "^5.1.11"
+  },
+  "scripts": {
+    "gen:types": "rimraf ./types && tsc --project tsconfig-types.json",
+    "build:esm": "rimraf ./dist && node ../../scripts/buildPackage.js && yarn gen:types",
+    "pack": "yarn build:umd && yarn pack",
+    "start": "node ../../scripts/buildExample.mjs && vite",
+    "build:example": "node ../../scripts/buildExample.mjs",
+    "size": "yarn build:umd && size-limit",
+    "build:umd": "rimraf ./dist && cross-env NODE_ENV=production webpack --config webpack.prod.config.js && cross-env NODE_ENV=development webpack --config webpack.dev.config.js && yarn gen:types",
+    "prepublishOnly": "node ./scripts/ensure-npm-auth.cjs"
+  }
+}
