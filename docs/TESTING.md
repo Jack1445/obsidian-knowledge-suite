@@ -14,14 +14,14 @@ Excalidraw Custom 的上游源码当前在新版 ESLint 类型规则下存在大
 ## 干净安装
 
 - 在空 Vault 中解压整合包。
-- 两个插件都能启用。
+- Knowledge Suite 能启用，且旧插件启用时能明确阻止初始化。
 - 命令面板中出现 Knowledge Map 入口。
 - 新建普通 Excalidraw 画布正常。
 
 ## 覆盖升级
 
 - 从上一稳定版本覆盖三个程序文件。
-- 两个插件的 `data.json` 未改变。
+- 两个旧插件的 `data.json` 未改变，新插件命名空间数据完整。
 - 原有画布可以打开。
 - 图片、字体和嵌入文件没有变成灰色占位符。
 
@@ -52,7 +52,7 @@ Excalidraw Custom 的上游源码当前在新版 ESLint 类型规则下存在大
 
 ## 发布验收
 
-- ZIP 内包含两个完整插件目录。
-- 两个独立 `artifacts` 目录均只有标准插件文件。
+- ZIP 内只包含 `knowledge-suite` 插件目录。
+- `artifacts/knowledge-suite` 包含标准插件文件和保留的许可证。
 - `SHA256SUMS.txt` 可以验证全部产物。
 - 用户明确验收后才允许创建 GitHub Release。

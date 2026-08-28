@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 import {
@@ -52,31 +52,19 @@ for (const artifact of coreArtifacts) {
 }
 
 run(commands.npm, ["run", "build"], { cwd: paths.excalidrawPlugin });
-run(commands.npm, ["run", "build"], { cwd: paths.knowledgeMap });
 
 const excalidrawDist = join(paths.excalidrawPlugin, "dist");
 const excalidrawOutput = join(
   paths.staging,
   ".obsidian",
   "plugins",
-  "obsidian-excalidraw-plugin",
+  "knowledge-suite",
 );
-const knowledgeOutput = join(
-  paths.staging,
-  ".obsidian",
-  "plugins",
-  "knowledge-map",
-);
-
 resetDirectoryWithin(paths.staging, paths.release);
 
 for (const file of ["main.js", "manifest.json", "styles.css"]) {
   copyFileEnsured(join(excalidrawDist, file), join(excalidrawOutput, file));
 }
-for (const file of ["main.js", "manifest.json", "styles.css"]) {
-  copyFileEnsured(join(paths.knowledgeMap, file), join(knowledgeOutput, file));
-}
-
 const installGuide = join(paths.suiteRoot, "docs", "INSTALL.md");
 if (existsSync(installGuide)) {
   copyFileEnsured(installGuide, join(paths.staging, "INSTALL.md"));
@@ -101,6 +89,26 @@ for (const signature of ["obsidianInlineTextStyles", "excalidraw-toggle-inline-b
   if (!embeddedCore.includes(signature)) {
     throw new Error(`Built Excalidraw plugin is missing Core signature: ${signature}`);
   }
+}
+
+for (const signature of ["knowledge-map-view", "knowledge-suite-data"]) {
+  if (!bundledPlugin.includes(signature)) {
+    throw new Error(`Built Knowledge Suite plugin is missing signature: ${signature}`);
+  }
+}
+
+const stagedManifest = JSON.parse(
+  readFileSync(join(excalidrawOutput, "manifest.json"), "utf8"),
+);
+if (stagedManifest.id !== "knowledge-suite") {
+  throw new Error(`Unexpected staged plugin ID: ${stagedManifest.id}`);
+}
+const stagedPluginIds = readdirSync(
+  join(paths.staging, ".obsidian", "plugins"),
+  { withFileTypes: true },
+).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+if (stagedPluginIds.length !== 1 || stagedPluginIds[0] !== "knowledge-suite") {
+  throw new Error(`Expected one staged plugin (knowledge-suite), found: ${stagedPluginIds.join(", ")}`);
 }
 
 const suite = getSuiteVersion();

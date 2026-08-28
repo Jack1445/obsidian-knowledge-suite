@@ -2,18 +2,17 @@
 
 ## 首次安装整合包
 
-1. 关闭 Obsidian，或至少关闭 Knowledge Map 与 Excalidraw 插件。
-2. 下载 `obsidian-knowledge-suite-vX.Y.Z.zip`。
+1. 在 Obsidian 中关闭旧的 Knowledge Map 与 Excalidraw 插件。
+2. 下载 `knowledge-suite-vX.Y.Z.zip`。
 3. 将压缩包内容解压到 Vault 根目录。
-4. 确认下面两个目录存在：
+4. 确认下面的新目录存在：
 
 ```text
-.obsidian/plugins/knowledge-map/
-.obsidian/plugins/obsidian-excalidraw-plugin/
+.obsidian/plugins/knowledge-suite/
 ```
 
 5. 启动 Obsidian。
-6. 在“设置 → 第三方插件”中启用 Excalidraw 和 Knowledge Map。
+6. 在“设置 → 第三方插件”中启用 Knowledge Suite。旧插件仍启用时，Knowledge Suite 会停止初始化并提示先关闭旧插件。
 
 ## 从旧版本升级
 
@@ -25,7 +24,7 @@ manifest.json
 styles.css
 ```
 
-不要删除或覆盖 `data.json`。它保存插件设置。
+不要删除或覆盖 `data.json`。首次启动会先把旧插件数据复制到新插件的备份目录，再导入新插件命名空间；旧数据不会被修改。
 
 ## 升级后检查
 
@@ -43,5 +42,5 @@ styles.css
 .obsidian/plugins/.knowledge-suite-backups/
 ```
 
-关闭两个插件后，将对应时间戳目录中的文件复制回插件目录即可。用户的 `data.json` 和画布文件无需回退。
+关闭 Knowledge Suite 后，将对应时间戳目录中的文件复制回插件目录即可。用户的 `data.json` 和画布文件无需回退。
 

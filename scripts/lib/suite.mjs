@@ -24,8 +24,7 @@ export const paths = Object.freeze({
     "packages",
     "excalidraw",
   ),
-  excalidrawPlugin: join(suiteRoot, "plugins", "excalidraw-custom"),
-  knowledgeMap: join(suiteRoot, "plugins", "knowledge-map"),
+  excalidrawPlugin: join(suiteRoot, "plugins", "knowledge-suite"),
   release: join(suiteRoot, "release"),
   staging: join(suiteRoot, "release", "staging"),
   artifacts: join(suiteRoot, "release", "artifacts"),
@@ -61,7 +60,6 @@ export const ensureDependencies = () => {
   const checks = [
     [join(paths.core, "node_modules"), "Excalidraw Core dependencies"],
     [join(paths.excalidrawPlugin, "node_modules"), "Excalidraw plugin dependencies"],
-    [join(paths.knowledgeMap, "node_modules"), "Knowledge Map dependencies"],
   ];
   const missing = checks.filter(([directory]) => !existsSync(directory));
   if (missing.length) {

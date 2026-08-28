@@ -18,6 +18,5 @@ run(commands.corepack, ["yarn", "install", "--frozen-lockfile"], {
   cwd: paths.core,
 });
 run(commands.npm, ["ci"], { cwd: paths.excalidrawPlugin });
-run(commands.npm, ["ci"], { cwd: paths.knowledgeMap });
 
 console.log("\nAll suite dependencies are installed.");

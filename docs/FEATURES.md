@@ -15,7 +15,7 @@ Knowledge Map 把 Obsidian 的真实文件夹和文件转换成可浏览的知�
 - 可以新建知识画布，并把文件或文件夹拖入画布。
 - 支持 2D 地图和地球画布。
 
-## Excalidraw Custom
+## Excalidraw 画布能力
 
 定制版保留 Excalidraw 原有绘图、文字、图形绑定、图片、链接和菜单能力，并加入：
 
@@ -33,7 +33,7 @@ Knowledge Map 把 Obsidian 的真实文件夹和文件转换成可浏览的知�
 
 Core 是 Excalidraw Custom 的内部依赖，负责文本排版、行内公式、局部样式、Canvas 渲染和 SVG 导出。普通用户不需要单独安装 Core。
 
-## 两个插件的关系
+## 统一插件架构
 
-Knowledge Map 负责 Obsidian 文件语义、地图生成、下钻和画布管理；Excalidraw Custom 负责通用画布编辑与渲染。两者分工明确，但由本仓库统一构建和发布。
+Knowledge Map 负责 Obsidian 文件语义、地图生成、下钻和画布管理；Excalidraw 画布模块负责通用编辑与渲染。两者现在由同一个 `knowledge-suite` 插件生命周期、数据协调层和发行包统一管理，不再作为两个插件安装或互相调用。
 

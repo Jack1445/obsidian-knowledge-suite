@@ -3,7 +3,7 @@
 ## 版本原则
 
 - Suite 使用 `suite-version.json` 中的 `suiteVersion`。
-- 两个插件继续使用各自 `manifest.json` 的语义化版本。
+- Knowledge Suite 的 `manifest.json` 使用同一 Suite 版本。
 - Core 版本记录在 `suite-version.json`，不作为用户安装项发布。
 
 ## 本地发布候选
@@ -17,9 +17,8 @@ npm run release:suite
 输出包括：
 
 ```text
-release/artifacts/excalidraw-custom/
-release/artifacts/knowledge-map/
-release/obsidian-knowledge-suite-vX.Y.Z.zip
+release/artifacts/knowledge-suite/
+release/knowledge-suite-vX.Y.Z.zip
 release/SHA256SUMS.txt
 ```
 
@@ -36,10 +35,9 @@ release/SHA256SUMS.txt
 
 GitHub Actions 将在整合版完成验收后加入。工作流应从同一源码提交生成：
 
-- 一个 Suite ZIP。
-- Excalidraw Custom 标准插件产物。
-- Knowledge Map 标准插件产物。
+- 一个 Knowledge Suite ZIP。
+- 一个 Knowledge Suite 标准插件产物及许可证目录。
 - SHA-256 校验文件。
 
-两个旧插件仓库届时只作为自动发布渠道，不再手动编辑源码。
+旧插件仓库保留为只读上游历史，不再作为发布渠道。
 

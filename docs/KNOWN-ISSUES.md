@@ -14,4 +14,4 @@
 - **Reproduction:** Drag a folder into a Knowledge Canvas, click the dropped folder, then use Back.
 - **Previous behavior:** The dropped node reused generated-layer navigation, expanding the folder in the source drawing and later stacking the root map into it.
 - **Fixed behavior:** Every folder opens or reuses an independent child canvas. Its persisted parent relationship drives Back navigation; Root is not generated and the source drawing is not modified.
-- **Regression coverage:** `plugins/knowledge-map/tests/knowledge-canvas-model.test.ts` and `plugins/knowledge-map/tests/knowledge-canvas-store.test.ts`.
+- **Regression coverage:** `plugins/knowledge-suite/tests/knowledge-map/knowledge-canvas-model.test.ts` and `plugins/knowledge-suite/tests/knowledge-map/knowledge-canvas-store.test.ts`.

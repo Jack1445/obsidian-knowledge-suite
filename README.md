@@ -1,10 +1,10 @@
 # Obsidian Knowledge Suite
 
-当前稳定版本：**v1.1.0（2026-08-26，已通过测试 Vault 分阶段验收）**。
+当前开发版本：**0.1.0-beta.1**。
 
 该版本完成了画布树、2维/3维父子画布、节点外观系统、3维画布交互、右键菜单重构，以及行内公式编辑修复，并通过统一源码校验、自动测试、生产构建与测试 Vault 部署。
 
-一个面向 Obsidian 的可视化知识工作台。本仓库统一维护两个可安装插件：
+一个面向 Obsidian 的可视化知识工作台。本仓库把两个既有插件合并为单一的 **Knowledge Suite** 插件（ID：`knowledge-suite`）：
 
 - **Knowledge Map**：以文件夹和笔记为基础的持久知识地图、画布管理与地球视图。
 - **Excalidraw Custom**：保留 Excalidraw 原有体验，并加入行内公式、局部加粗等定制能力。
@@ -16,8 +16,7 @@
 ## 目录
 
 ```text
-plugins/knowledge-map          Knowledge Map 插件
-plugins/excalidraw-custom      定制 Excalidraw 插件
+plugins/knowledge-suite        Knowledge Suite 统一插件
 packages/excalidraw-core-custom 定制 Excalidraw Core
 scripts/                       统一构建、测试、打包和部署脚本
 docs/                          面向开发者和新人的说明文档
@@ -42,8 +41,8 @@ npm run package:suite
 
 ```text
 release/staging/   可直接放入 Vault 的目录结构
-release/artifacts/ 两个插件各自的标准发布文件
-release/*.zip      一个整合安装包
+release/artifacts/ Knowledge Suite 标准发布文件与许可证
+release/*.zip      单插件安装包
 ```
 
 ## 文档

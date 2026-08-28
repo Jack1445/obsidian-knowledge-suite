@@ -1,0 +1,11 @@
+{
+  "id": "knowledge-suite",
+  "name": "Knowledge Suite",
+  "version": "0.1.0-beta.1",
+  "minAppVersion": "1.8.7",
+  "description": "A unified visual knowledge workspace combining Excalidraw drawing and Knowledge Map navigation.",
+  "author": "Jack1445",
+  "authorUrl": "https://github.com/Jack1445",
+  "helpUrl": "https://github.com/Jack1445/knowledge-suite#readme",
+  "isDesktopOnly": false
+}

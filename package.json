@@ -1,9 +1,15 @@
 {
-  "name": "obsidian-knowledge-suite",
-  "version": "1.1.2",
+  "name": "knowledge-suite",
+  "version": "0.1.0-beta.1",
   "private": true,
   "type": "module",
-  "description": "Unified source, build, and release workspace for Knowledge Map and Excalidraw Custom.",
+  "description": "A unified Obsidian visual knowledge workspace combining Excalidraw and Knowledge Map.",
+  "license": "AGPL-3.0",
+  "author": "Jack1445",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jack1445/knowledge-suite.git"
+  },
   "scripts": {
     "install:suite": "node scripts/install-suite.mjs",
     "test:suite": "node scripts/test-suite.mjs",

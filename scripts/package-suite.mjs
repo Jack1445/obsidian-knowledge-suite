@@ -20,12 +20,8 @@ resetDirectoryWithin(paths.artifacts, paths.release);
 
 const componentSources = [
   {
-    source: join(paths.staging, ".obsidian", "plugins", "obsidian-excalidraw-plugin"),
-    destination: join(paths.artifacts, "excalidraw-custom"),
-  },
-  {
-    source: join(paths.staging, ".obsidian", "plugins", "knowledge-map"),
-    destination: join(paths.artifacts, "knowledge-map"),
+    source: join(paths.staging, ".obsidian", "plugins", "knowledge-suite"),
+    destination: join(paths.artifacts, "knowledge-suite"),
   },
 ];
 for (const component of componentSources) {
@@ -33,6 +29,23 @@ for (const component of componentSources) {
     const relativePath = relativePosix(component.source, file);
     copyFileEnsured(file, join(component.destination, relativePath));
   }
+}
+
+const licenses = [
+  [join(paths.excalidrawPlugin, "LICENSE"), "AGPL-3.0.txt"],
+  [join(paths.suiteRoot, "THIRD_PARTY_LICENSES.md"), "THIRD_PARTY_LICENSES.md"],
+  [join(paths.core, "LICENSE"), "excalidraw-core-MIT.txt"],
+  [
+    join(paths.excalidrawPlugin, "third-party", "knowledge-map", "LICENSE"),
+    "knowledge-map-MIT.txt",
+  ],
+];
+for (const [source, filename] of licenses) {
+  copyFileEnsured(
+    source,
+    join(paths.artifacts, "knowledge-suite", "licenses", filename),
+  );
+  copyFileEnsured(source, join(paths.staging, "licenses", filename));
 }
 
 const stagingChecksums = listFiles(paths.staging)
@@ -44,7 +57,7 @@ const suite = getSuiteVersion();
 mkdirSync(paths.release, { recursive: true });
 const zipFile = join(
   paths.release,
-  `obsidian-knowledge-suite-v${suite.suiteVersion}.zip`,
+  `knowledge-suite-v${suite.suiteVersion}.zip`,
 );
 createZipFromDirectory(paths.staging, zipFile);
 

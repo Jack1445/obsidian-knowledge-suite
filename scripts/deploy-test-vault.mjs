@@ -24,12 +24,8 @@ const backupRoot = join(pluginsRoot, ".knowledge-suite-backups", timestamp);
 
 const deployments = [
   {
-    id: "obsidian-excalidraw-plugin",
-    source: join(paths.staging, ".obsidian", "plugins", "obsidian-excalidraw-plugin"),
-  },
-  {
-    id: "knowledge-map",
-    source: join(paths.staging, ".obsidian", "plugins", "knowledge-map"),
+    id: "knowledge-suite",
+    source: join(paths.staging, ".obsidian", "plugins", "knowledge-suite"),
   },
 ];
 

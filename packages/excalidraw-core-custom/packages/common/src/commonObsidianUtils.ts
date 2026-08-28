@@ -1,5 +1,7 @@
 import type { EditorInterface, StylesPanelMode } from "./editorInterface";
 
+const HOST_PLUGIN_ID = "knowledge-suite";
+
 //zsviczian, my dirty little secrets. These are hacks I am not proud of...
 export type ObsidianDeviceType = {
   isDesktop: boolean;
@@ -24,7 +26,7 @@ export function destroyObsidianUtils() {
 
 export function initializeObsidianUtils() {
   //@ts-ignore
-  hostPlugin = app.plugins.plugins["obsidian-excalidraw-plugin"];
+  hostPlugin = app.plugins.plugins[HOST_PLUGIN_ID];
 }
 
 export function getHostPlugin() {
@@ -39,7 +41,7 @@ export const getObsidianDeviceInfo = () => {
     return ObsidianDevice;
   }
   //@ts-ignore
-  const obsidianPlugin = app.plugins.plugins["obsidian-excalidraw-plugin"];
+  const obsidianPlugin = app.plugins.plugins[HOST_PLUGIN_ID];
   if (!obsidianPlugin) {
     return null;
   }
@@ -50,7 +52,7 @@ export const getObsidianDeviceInfo = () => {
 
 export const getDesktopUIMode = () => {
   //@ts-ignore
-  const obsidianPlugin = app.plugins.plugins["obsidian-excalidraw-plugin"];
+  const obsidianPlugin = app.plugins.plugins[HOST_PLUGIN_ID];
   if (!obsidianPlugin) {
     return "tray";
   }
