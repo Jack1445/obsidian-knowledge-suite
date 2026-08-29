@@ -130,6 +130,8 @@ import { getEnabledLegacyPluginNames } from "./legacyPluginConflict";
 import { KnowledgeSuiteDataCoordinator } from "./KnowledgeSuiteDataCoordinator";
 import KnowledgeMapController from "../features/knowledge-map/KnowledgeMapController";
 import type { KnowledgeMapData } from "../features/knowledge-map/data/schema";
+import DocumentMetadataController from "../features/document-metadata/DocumentMetadataController";
+import type { DocumentMetadataData } from "../features/document-metadata/types";
 
 declare const PLUGIN_VERSION: string;
 declare const INITIAL_TIMESTAMP: number;
@@ -636,6 +638,7 @@ export default class ExcalidrawPlugin extends Plugin {
   private initializationBlocked = false;
   private readonly dataCoordinator: KnowledgeSuiteDataCoordinator;
   public knowledgeMap: KnowledgeMapController | null = null;
+  public documentMetadata: DocumentMetadataController | null = null;
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
@@ -845,9 +848,6 @@ export default class ExcalidrawPlugin extends Plugin {
     addIcon(ICON_NAME, EXCALIDRAW_ICON);
     addIcon(SCRIPTENGINE_ICON_NAME, SCRIPTENGINE_ICON);
     addIcon(EXPORT_IMG_ICON_NAME, EXPORT_IMG_ICON);
-    this.addRibbonIcon(ICON_NAME, t("CREATE_NEW"), (e) =>
-      this.actionRibbonClick(e),
-    );
 
     try {
       void this.loadSettings({ reEnableAutosave: true }).then(() =>
@@ -890,6 +890,18 @@ export default class ExcalidrawPlugin extends Plugin {
       this.knowledgeMap = null;
       new Notice(t("KNOWLEDGE_MAP_INITIALIZATION_FAILED"), 6000);
       console.error("Error initializing Knowledge Map features", error);
+    }
+
+    try {
+      this.documentMetadata = new DocumentMetadataController(
+        this,
+        this.dataCoordinator.getNamespace<DocumentMetadataData>("documentMetadata"),
+      );
+      await this.documentMetadata.initialize();
+    } catch (error) {
+      this.documentMetadata = null;
+      new Notice("标签与属性功能初始化失败。", 6000);
+      console.error("Error initializing document metadata features", error);
     }
   }
 
@@ -1597,6 +1609,8 @@ export default class ExcalidrawPlugin extends Plugin {
 
     this.knowledgeMap?.destroy();
     this.knowledgeMap = null;
+    this.documentMetadata?.destroy();
+    this.documentMetadata = null;
 
     ExcalidrawSidepanelView.onPluginUnload(this);
     const excalidrawViews = getExcalidrawViews(this.app);

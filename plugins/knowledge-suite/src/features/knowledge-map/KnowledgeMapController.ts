@@ -1,4 +1,5 @@
 import { Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
+import { ICON_NAME } from '../../constants/constants';
 import type ExcalidrawPlugin from '../../core/main';
 import type { KnowledgeSuiteDataNamespace } from '../../core/KnowledgeSuiteDataCoordinator';
 import type { KnowledgeMapData } from './data/schema';
@@ -50,7 +51,7 @@ export default class KnowledgeMapController {
 		this.host.registerView(KNOWLEDGE_MAP_GLOBE_VIEW_TYPE, (leaf) => new GlobeView(leaf, this));
 		this.host.registerExtensions([GLOBE_CANVAS_FILE_EXTENSION], KNOWLEDGE_MAP_GLOBE_VIEW_TYPE);
 		this.host.registerView(KNOWLEDGE_CANVAS_TREE_VIEW_TYPE, (leaf) => new CanvasTreeView(leaf, this));
-		this.host.addRibbonIcon('layout-dashboard', '管理画布', () => {
+		this.host.addRibbonIcon(ICON_NAME, '管理画布', () => {
 			this.openActiveCanvasManager();
 		});
 		this.host.addRibbonIcon('folder-tree', '打开画布树', () => void this.activateCanvasTree());

@@ -51,6 +51,12 @@ describe('Knowledge Suite data coordination', () => {
 			excalidraw: { theme: 'dark' },
 			knowledgeMap: { schemaVersion: 8, mapStates: {} },
 		});
+		await coordinator.documentMetadata.saveData({ schemaVersion: 1, fields: [] });
+		expect(savedData).toMatchObject({
+			excalidraw: { theme: 'dark' },
+			knowledgeMap: { schemaVersion: 8, mapStates: {} },
+			documentMetadata: { schemaVersion: 1, fields: [] },
+		});
 
 		const fileCountAfterFirstImport = files.size;
 		const second = await coordinator.importLegacyData(app);

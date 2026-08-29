@@ -115,7 +115,11 @@ if (!isLib) {
     "./src/features/knowledge-map/styles.css",
     "utf8",
   );
-  const styles = excalidraw_styles + plugin_styles + knowledge_map_styles;
+  const document_metadata_styles = fs.readFileSync(
+    "./src/features/document-metadata/styles.css",
+    "utf8",
+  );
+  const styles = excalidraw_styles + plugin_styles + knowledge_map_styles + document_metadata_styles;
   cssnano()
     .process(styles, {
       from: path.resolve("styles.css"),

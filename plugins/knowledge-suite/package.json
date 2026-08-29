@@ -19,7 +19,7 @@
     "doc": "npm run lib && node scripts/generate-script-library.mjs",
     "skill": "npm run lib && node scripts/skill-builder.mjs",
     "mindmap": "node scripts/deploy-mindmap-builder.mjs",
-    "test:knowledge-map": "vitest run tests/knowledge-map",
+    "test:knowledge-map": "vitest run tests/knowledge-map tests/document-metadata",
     "lint": "eslint .",
     "lint:fix": "npx prettier --write \"src/**/*.{ts,tsx}\" && eslint --max-warnings=0 --ext .ts,.tsx ./src --fix"
   },

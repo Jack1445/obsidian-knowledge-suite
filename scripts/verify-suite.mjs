@@ -34,6 +34,10 @@ const assertions = [
   [existsSync(join(paths.excalidrawPlugin, "LICENSE")), "Excalidraw plugin license is present"],
   [existsSync(join(paths.excalidrawPlugin, "third-party", "knowledge-map", "LICENSE")), "Knowledge Map license is present"],
   [existsSync(join(paths.excalidrawPlugin, "src", "features", "knowledge-map", "KnowledgeMapController.ts")), "Knowledge Map controller is integrated"],
+  [existsSync(join(paths.excalidrawPlugin, "src", "features", "document-metadata", "DocumentMetadataController.ts")), "Document metadata controller is integrated"],
+  [existsSync(join(paths.excalidrawPlugin, "src", "features", "document-metadata", "DocumentMetadataService.ts")), "Document metadata service is present"],
+  [existsSync(join(paths.excalidrawPlugin, "src", "features", "document-metadata", "fieldBlock.ts")), "Safe Markdown field block support is present"],
+  [existsSync(join(paths.excalidrawPlugin, "src", "features", "document-metadata", "styles.css")), "Document metadata styles are present"],
   [existsSync(join(paths.core, "packages", "element", "src", "inlineTextStyle.ts")), "Partial-bold source is present"],
   [existsSync(join(paths.core, "packages", "excalidraw", "actions", "actionInlineBold.tsx")), "Partial-bold action is present"],
 ];

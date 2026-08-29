@@ -8,6 +8,7 @@
 
 - **Knowledge Map**：以文件夹和笔记为基础的持久知识地图、画布管理与地球视图。
 - **Excalidraw Custom**：保留 Excalidraw 原有体验，并加入行内公式、局部加粗等定制能力。
+- **标签与属性**：为 Markdown 文档建立自定义字段，在管理表格和正文内查看、编辑与筛选。
 
 定制的 Excalidraw Core 作为内部构建依赖保存在 `packages/excalidraw-core-custom`，用户不需要单独安装它。
 
