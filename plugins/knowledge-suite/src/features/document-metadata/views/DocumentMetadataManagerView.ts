@@ -75,13 +75,8 @@ export class DocumentMetadataManagerView extends ItemView {
 
     const header = this.contentEl.createDiv({ cls: "ks-metadata-manager__header" });
     const identity = header.createDiv({ cls: "ks-metadata-manager__identity" });
-    const icon = identity.createDiv({ cls: "ks-metadata-manager__icon" });
-    setIcon(icon, "table-properties");
     const titleGroup = identity.createDiv();
     titleGroup.createEl("h2", { text: "标签与属性管理" });
-    titleGroup.createEl("p", {
-      text: `${allFiles.length} 份 Markdown · ${fields.length} 个字段`,
-    });
     const headerActions = header.createDiv({ cls: "ks-metadata-manager__header-actions" });
     const refreshButton = headerActions.createEl("button", {
       cls: "clickable-icon",
@@ -90,15 +85,17 @@ export class DocumentMetadataManagerView extends ItemView {
     setIcon(refreshButton, "refresh-cw");
     refreshButton.addEventListener("click", () => void this.render());
     const addButton = headerActions.createEl("button", {
-      cls: "mod-cta ks-metadata-manager__add-field",
-      text: "新建字段",
+      cls: "ks-metadata-manager__add-field",
+      attr: { "aria-label": "新建字段" },
     });
     const addIcon = addButton.createSpan({ cls: "ks-metadata-manager__button-icon" });
     setIcon(addIcon, "plus");
+    addButton.createSpan({ text: "新建字段" });
     addButton.addEventListener("click", () => this.openCreateField());
 
     const toolbar = this.contentEl.createDiv({ cls: "ks-metadata-manager__toolbar" });
-    const searchWrap = toolbar.createDiv({ cls: "ks-metadata-manager__search" });
+    const toolbarPrimary = toolbar.createDiv({ cls: "ks-metadata-manager__toolbar-primary" });
+    const searchWrap = toolbarPrimary.createDiv({ cls: "ks-metadata-manager__search" });
     const searchIcon = searchWrap.createSpan();
     setIcon(searchIcon, "search");
     const searchInput = searchWrap.createEl("input", {
@@ -121,25 +118,39 @@ export class DocumentMetadataManagerView extends ItemView {
       this.scheduleRender();
     });
 
-    const folderSelect = toolbar.createEl("select", {
-      cls: "dropdown ks-metadata-manager__folder",
+    const folderButton = toolbarPrimary.createEl("button", {
+      cls: "ks-metadata-manager__folder-button",
       attr: { "aria-label": "按文件夹筛选" },
     });
-    folderSelect.createEl("option", { value: "/", text: "全部文件夹" });
+    const folderIcon = folderButton.createSpan({ cls: "ks-metadata-manager__folder-icon" });
+    setIcon(folderIcon, "folder");
+    folderButton.createSpan({
+      cls: "ks-metadata-manager__folder-label",
+      text: this.folder === "/" ? "全部文件夹" : this.folder,
+    });
+    const folderChevron = folderButton.createSpan({ cls: "ks-metadata-manager__folder-chevron" });
+    setIcon(folderChevron, "chevron-down");
     const folders = [...new Set(allFiles.map((file) => file.parent?.path || "/"))]
       .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-    for (const path of folders) {
-      if (path === "/") continue;
-      folderSelect.createEl("option", { value: path, text: path });
-    }
-    folderSelect.value = this.folder;
-    folderSelect.addEventListener("change", () => {
-      this.folder = folderSelect.value;
-      this.page = 0;
-      void this.render();
+    folderButton.addEventListener("click", (event) => {
+      const menu = new Menu();
+      for (const path of ["/", ...folders.filter((candidate) => candidate !== "/")]) {
+        menu.addItem((item) => item
+          .setTitle(path === "/" ? "全部文件夹" : path)
+          .setIcon(path === "/" ? "folders" : "folder")
+          .setChecked(path === this.folder)
+          .setSection("knowledge-suite-folder-picker")
+          .onClick(() => {
+            this.folder = path;
+            this.page = 0;
+            void this.render();
+          }));
+      }
+      menu.showAtMouseEvent(event);
     });
     const activeFilter = this.controller.service.getSavedFilter(MANAGER_FILTER_CONTEXT);
-    const filterButton = toolbar.createEl("button", {
+    const toolbarActions = toolbar.createDiv({ cls: "ks-metadata-manager__toolbar-actions" });
+    const filterButton = toolbarActions.createEl("button", {
       cls: "ks-metadata-manager__filter-button",
       attr: { "aria-label": "设置字段筛选条件" },
     });
@@ -460,9 +471,8 @@ export class DocumentMetadataManagerView extends ItemView {
 
   private renderPagination(total: number, pageCount: number): void {
     const footer = this.contentEl.createDiv({ cls: "ks-metadata-manager__footer" });
-    const start = total === 0 ? 0 : this.page * PAGE_SIZE + 1;
-    const end = Math.min(total, (this.page + 1) * PAGE_SIZE);
-    footer.createSpan({ text: `显示 ${start}–${end}，共 ${total} 份文档` });
+    footer.createSpan({ cls: "ks-metadata-manager__result-count", text: `${total} 份文档` });
+    if (pageCount <= 1) return;
     const actions = footer.createDiv({ cls: "ks-metadata-manager__pagination" });
     const previous = actions.createEl("button", {
       cls: "clickable-icon",

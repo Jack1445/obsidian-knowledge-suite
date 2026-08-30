@@ -1,29 +1,25 @@
 .ks-metadata-manager {
-  --ks-metadata-radius: 14px;
-  --ks-metadata-shadow: 0 12px 32px rgb(0 0 0 / 0.08);
+  --ks-metadata-radius: 10px;
   display: flex;
   height: 100%;
   min-height: 0;
-  padding: clamp(16px, 2.4vw, 28px);
-  gap: 14px;
+  padding: clamp(14px, 2vw, 22px);
+  gap: 10px;
   flex-direction: column;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--interactive-accent) 10%, transparent), transparent 30%),
-    var(--background-primary);
+  background: var(--background-primary);
+  font-family: var(--font-interface);
 }
 
 .ks-metadata-manager__header {
   display: flex;
-  min-height: 72px;
-  padding: 14px 16px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--ks-metadata-radius);
+  min-height: 54px;
+  padding: 2px 3px 8px;
+  border-block-end: 1px solid var(--background-modifier-border);
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  background: color-mix(in srgb, var(--background-secondary) 84%, transparent);
-  box-shadow: var(--ks-metadata-shadow);
+  gap: 12px;
+  background: transparent;
 }
 
 .ks-metadata-manager__identity,
@@ -31,41 +27,23 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 12px;
-}
-
-.ks-metadata-manager__icon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  flex: 0 0 auto;
-  place-items: center;
-  color: var(--text-on-accent);
-  background: linear-gradient(145deg, var(--interactive-accent), color-mix(in srgb, var(--interactive-accent) 70%, #6c5ce7));
-  box-shadow: 0 7px 18px color-mix(in srgb, var(--interactive-accent) 26%, transparent);
-}
-
-.ks-metadata-manager__icon svg {
-  width: 21px;
-  height: 21px;
+  gap: 10px;
 }
 
 .ks-metadata-manager__identity h2 {
   margin: 0;
   color: var(--text-normal);
-  font-size: var(--font-ui-large);
-  letter-spacing: -0.015em;
-}
-
-.ks-metadata-manager__identity p {
-  margin: 3px 0 0;
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", var(--font-interface);
+  font-size: clamp(22px, 1.55vw, 27px);
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
 }
 
 .ks-metadata-manager__header-actions,
 .ks-metadata-manager__toolbar,
+.ks-metadata-manager__toolbar-primary,
+.ks-metadata-manager__toolbar-actions,
 .ks-metadata-manager__pagination,
 .ks-metadata-modal__actions {
   display: flex;
@@ -73,10 +51,46 @@
   gap: 8px;
 }
 
-.ks-metadata-manager__add-field {
+button.ks-metadata-manager__add-field {
+  appearance: none;
   display: inline-flex;
+  height: 34px;
+  padding-inline: 13px;
+  border: 1px solid color-mix(in srgb, #9b90ee 88%, #6f63c9);
+  border-radius: 9px;
   align-items: center;
   gap: 6px;
+  color: #fff !important;
+  background-color: #9b90ee !important;
+  background-image: none !important;
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", var(--font-interface);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 2px rgb(20 16 42 / 16%) !important;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+button.ks-metadata-manager__add-field:hover {
+  border-color: color-mix(in srgb, #a89ef2 84%, #6f63c9);
+  background-color: #a89ef2 !important;
+}
+
+button.ks-metadata-manager__add-field:active {
+  background-color: #8f82e8 !important;
+  transform: translateY(1px);
+}
+
+button.ks-metadata-manager__add-field:focus-visible {
+  outline: 2px solid color-mix(in srgb, #9b90ee 62%, transparent);
+  outline-offset: 2px;
+}
+
+button.ks-metadata-manager__add-field > span,
+button.ks-metadata-manager__add-field .ks-metadata-manager__button-icon,
+button.ks-metadata-manager__add-field svg {
+  color: #fff !important;
+  stroke: currentColor;
 }
 
 .ks-metadata-manager__button-icon {
@@ -84,33 +98,52 @@
 }
 
 .ks-metadata-manager__button-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 
+.ks-metadata-manager__header-actions > .clickable-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--text-muted);
+}
 
 .ks-metadata-manager__toolbar {
-  min-height: 38px;
+  min-height: 44px;
+  padding: 5px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--ks-metadata-radius);
   justify-content: space-between;
+  background: var(--background-secondary);
+}
+
+.ks-metadata-manager__toolbar-primary {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ks-metadata-manager__toolbar-actions {
+  flex: 0 0 auto;
 }
 
 .ks-metadata-manager__search {
   display: flex;
-  width: min(440px, 100%);
+  width: min(360px, 44vw);
   min-width: 220px;
-  height: var(--input-height);
-  padding-inline: 10px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--input-radius);
+  height: 32px;
+  padding-inline: 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   align-items: center;
-  gap: 8px;
-  background: var(--background-primary-alt);
+  gap: 7px;
+  background: var(--background-primary);
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .ks-metadata-manager__search:focus-within {
   border-color: var(--background-modifier-border-focus);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 16%, transparent);
 }
 
 .ks-metadata-manager__search svg {
@@ -126,22 +159,85 @@
   border: 0;
   box-shadow: none;
   background: transparent;
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
 }
 
-.ks-metadata-manager__folder {
-  max-width: min(320px, 40vw);
+.ks-metadata-manager__folder-button {
+  appearance: none;
+  display: flex;
+  width: min(240px, 28vw);
+  min-width: 150px;
+  height: 32px;
+  padding: 0 8px 0 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-normal);
+  background: var(--background-primary);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-normal);
+  text-align: start;
+  box-shadow: none !important;
+}
+
+.ks-metadata-manager__folder-button:hover,
+.ks-metadata-manager__folder-button:focus-visible {
+  border-color: var(--background-modifier-border-hover);
+  background: var(--background-primary);
+}
+
+.ks-metadata-manager__folder-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.ks-metadata-manager__folder-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ks-metadata-manager__folder-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-metadata-manager__folder-chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.ks-metadata-manager__folder-chevron svg {
+  width: 14px;
+  height: 14px;
 }
 
 .ks-metadata-manager__filter-button {
+  appearance: none;
   display: inline-flex;
-  height: var(--input-height);
-  padding-inline: 10px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--input-radius);
+  height: 32px;
+  padding-inline: 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   align-items: center;
   gap: 6px;
   color: var(--text-muted);
-  background: var(--background-primary-alt);
+  background: transparent;
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
+  box-shadow: none !important;
+}
+
+.ks-metadata-manager__filter-button:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
 }
 
 .ks-metadata-manager__filter-button.is-active {
@@ -175,7 +271,7 @@
   flex: 1 1 auto;
   overflow: auto;
   background: var(--background-primary);
-  box-shadow: var(--ks-metadata-shadow);
+  box-shadow: none;
 }
 
 .ks-metadata-manager__table {
@@ -183,6 +279,7 @@
   border-collapse: separate;
   table-layout: fixed;
   font-size: var(--font-ui-small);
+  font-family: var(--font-interface);
 }
 
 .ks-metadata-manager__table th,
@@ -454,11 +551,16 @@
 
 .ks-metadata-manager__footer {
   display: flex;
-  min-height: 32px;
+  min-height: 24px;
+  padding-inline: 4px;
   align-items: center;
   justify-content: space-between;
-  color: var(--text-muted);
+  color: var(--text-faint);
   font-size: var(--font-ui-smaller);
+}
+
+.ks-metadata-manager__result-count {
+  line-height: 1;
 }
 
 .ks-metadata-manager__pagination>span {
@@ -756,6 +858,35 @@
   border-color: var(--background-modifier-border);
 }
 
+.menu:has(.menu-item[data-section="knowledge-suite-folder-picker"]) {
+  min-width: 230px;
+  max-width: min(360px, calc(100vw - 24px));
+  max-height: min(460px, calc(100vh - 32px));
+  padding: 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  overflow-y: auto;
+  font-family: var(--font-interface);
+  box-shadow: var(--shadow-s);
+}
+
+.menu:has(.menu-item[data-section="knowledge-suite-folder-picker"]) .menu-item {
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: var(--radius-s);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-normal);
+}
+
+.menu:has(.menu-item[data-section="knowledge-suite-folder-picker"]) .menu-item-icon {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  color: var(--text-muted);
+}
+
 .ks-field-action-modal__actions {
   margin-block-start: 16px;
   padding-block-start: 12px;
@@ -881,6 +1012,7 @@
 
 .ks-document-fields {
   --ks-field-accent: var(--interactive-accent);
+  pointer-events: auto;
   margin: 1.15em 0;
   border: 1px solid var(--background-modifier-border);
   border-radius: 14px;
@@ -1062,7 +1194,6 @@
     padding: 12px;
   }
 
-  .ks-metadata-manager__header,
   .ks-metadata-manager__toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -1072,11 +1203,23 @@
     justify-content: flex-end;
   }
 
+  .ks-metadata-manager__toolbar-primary {
+    width: 100%;
+  }
+
   .ks-metadata-manager__search,
-  .ks-metadata-manager__folder,
+  .ks-metadata-manager__folder-button,
   .ks-metadata-manager__filter-button {
     width: 100%;
     max-width: none;
+  }
+
+  .ks-metadata-manager__folder-button {
+    flex: 1 1 auto;
+  }
+
+  .ks-metadata-manager__toolbar-actions {
+    justify-content: flex-end;
   }
 
   .ks-filter-modal__condition {

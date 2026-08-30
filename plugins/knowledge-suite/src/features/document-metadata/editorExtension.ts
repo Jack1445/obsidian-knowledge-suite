@@ -1,7 +1,8 @@
 import { type EditorState, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
-import { editorInfoField } from "obsidian";
+import { editorInfoField, editorLivePreviewField } from "obsidian";
 import type DocumentMetadataController from "./DocumentMetadataController";
+import { findDocumentFieldBlocks } from "./fieldBlock";
 import { MarkdownFieldPanel } from "./MarkdownFieldPanel";
 
 class DocumentFieldsWidget extends WidgetType {
@@ -37,7 +38,9 @@ class DocumentFieldsWidget extends WidgetType {
   }
 
   ignoreEvent(): boolean {
-    return false;
+    // The panel contains native form controls. Let them handle pointer and
+    // keyboard events instead of allowing CodeMirror to move the text cursor.
+    return true;
   }
 }
 
@@ -47,13 +50,19 @@ const buildDecorations = (
 ): DecorationSet => {
   const file = state.field(editorInfoField, false)?.file ?? null;
   if (!controller.service.isManagedMarkdownFile(file)) return Decoration.none;
-  return Decoration.set([
+  const decorations = [
     Decoration.widget({
       widget: new DocumentFieldsWidget(controller, file.path),
       block: true,
       side: -1,
     }).range(0),
-  ]);
+  ];
+  if (state.field(editorLivePreviewField, false) === true) {
+    for (const block of findDocumentFieldBlocks(state.doc.toString())) {
+      decorations.push(Decoration.replace({ block: true }).range(block.start, block.end));
+    }
+  }
+  return Decoration.set(decorations, true);
 };
 
 export const createDocumentFieldsEditorExtension = (
@@ -63,9 +72,16 @@ export const createDocumentFieldsEditorExtension = (
   update: (decorations, transaction) => {
     const previousPath = transaction.startState.field(editorInfoField, false)?.file?.path ?? null;
     const nextPath = transaction.state.field(editorInfoField, false)?.file?.path ?? null;
-    return previousPath === nextPath
-      ? decorations.map(transaction.changes)
-      : buildDecorations(controller, transaction.state);
+    const previousLivePreview = transaction.startState.field(editorLivePreviewField, false) ?? false;
+    const nextLivePreview = transaction.state.field(editorLivePreviewField, false) ?? false;
+    if (
+      previousPath === nextPath &&
+      previousLivePreview === nextLivePreview &&
+      !transaction.docChanged
+    ) {
+      return decorations;
+    }
+    return buildDecorations(controller, transaction.state);
   },
   provide: (field) => EditorView.decorations.from(field),
 });

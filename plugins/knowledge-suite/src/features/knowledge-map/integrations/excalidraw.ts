@@ -498,7 +498,7 @@ export class ExcalidrawIntegration {
 	}
 
 	async refreshActiveKnowledgeCanvas(): Promise<void> {
-		const leaf = this.app.workspace.getLeaf(false);
+		const leaf = this.app.workspace.getMostRecentLeaf();
 		if (!leaf) return;
 		const view = leaf.view as unknown as ExcalidrawViewLike;
 		const file = view.file;
@@ -514,7 +514,7 @@ export class ExcalidrawIntegration {
 	}
 
 	async goBackActiveKnowledgeCanvas(): Promise<void> {
-		const leaf = this.app.workspace.getLeaf(false);
+		const leaf = this.app.workspace.getMostRecentLeaf();
 		if (!leaf) return;
 		const view = leaf.view as unknown as ExcalidrawViewLike;
 		const file = view.file;
@@ -534,7 +534,7 @@ export class ExcalidrawIntegration {
 	}
 
 	async resetActiveKnowledgeCanvasLayout(): Promise<void> {
-		const leaf = this.app.workspace.getLeaf(false);
+		const leaf = this.app.workspace.getMostRecentLeaf();
 		if (!leaf) return;
 		const view = leaf.view as unknown as ExcalidrawViewLike;
 		const file = view.file;
@@ -797,7 +797,9 @@ export class ExcalidrawIntegration {
 		if (!container) return () => undefined;
 		const viewWindow = container.ownerDocument.defaultView ?? window;
 		const onKeyDown = (event: KeyboardEvent): void => {
-			if (this.app.workspace.getLeaf(false)?.view !== view) return;
+			// This is a read-only activity check. getLeaf(false) may create an
+			// empty tab when the active leaf is a custom ItemView in Obsidian 1.13.
+			if (this.app.workspace.getMostRecentLeaf()?.view !== view) return;
 			if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
 			if (event.target instanceof Element && event.target.closest('.knowledge-map-formula-dialog')) return;
 			const key = event.key.toLowerCase();
@@ -1233,7 +1235,7 @@ export class ExcalidrawIntegration {
 		view: ExcalidrawViewLike;
 		ea: ExcalidrawAutomateLike;
 	} | null {
-		const leaf = this.app.workspace.getLeaf(false);
+		const leaf = this.app.workspace.getMostRecentLeaf();
 		const view = leaf?.view as unknown as ExcalidrawViewLike | undefined;
 		const file = view?.file;
 		if (!view || !file || !this.store.getKnowledgeCanvas(file.path)) {

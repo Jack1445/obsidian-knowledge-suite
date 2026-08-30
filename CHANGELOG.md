@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Made the Markdown document metadata panel directly editable by allowing its native controls to own pointer and keyboard events.
+- Hid the underlying `knowledge-suite-fields` fenced block in Live Preview while preserving the source data in the Markdown file.
+- Redesigned the metadata manager with a cleaner title bar, compact toolbar, native-style folder menu, simplified document count, and consistent Obsidian typography and spacing.
+- Restyled the New field action with a softer purple surface, white label and icon, and coordinated hover, active, and focus states.
+- Fixed Ctrl, Alt, Tab, and other keys opening an empty Obsidian tab from the metadata manager by replacing read-only `getLeaf(false)` calls in the Knowledge Map Excalidraw integration with the non-creating `getMostRecentLeaf()` API.
+- Removed the temporary keyboard interception, focus workaround, and diagnostic instrumentation used while isolating the empty-tab regression.
+
 ## 1.1.2 - 2026-08-27
 
 - Added independently configurable commands for inserting standalone and inline LaTeX formulas in 2D canvases.
