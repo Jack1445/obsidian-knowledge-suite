@@ -3,7 +3,11 @@ import type { App, Plugin } from "obsidian";
 const DATA_FORMAT = "knowledge-suite-data";
 const DATA_SCHEMA_VERSION = 1;
 
-type DataNamespaceKey = "excalidraw" | "knowledgeMap" | "documentMetadata";
+type DataNamespaceKey =
+  | "excalidraw"
+  | "knowledgeMap"
+  | "documentMetadata"
+  | "semanticUnits";
 
 type KnowledgeSuiteDataEnvelope = {
   format: typeof DATA_FORMAT;
@@ -11,6 +15,7 @@ type KnowledgeSuiteDataEnvelope = {
   excalidraw: unknown;
   knowledgeMap: unknown;
   documentMetadata?: unknown;
+  semanticUnits?: unknown;
   migrations?: {
     legacyImportV1?: LegacyImportRecord;
   };
@@ -80,6 +85,8 @@ export class KnowledgeSuiteDataCoordinator {
     this.createNamespace("knowledgeMap");
   public readonly documentMetadata: KnowledgeSuiteDataNamespace =
     this.createNamespace("documentMetadata");
+  public readonly semanticUnits: KnowledgeSuiteDataNamespace =
+    this.createNamespace("semanticUnits");
 
   constructor(private readonly plugin: Plugin) {}
 

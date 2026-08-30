@@ -9,6 +9,8 @@ import {
 } from "../ui/FieldContextModals";
 import { FieldValueModal } from "../ui/FieldValueModal";
 import { FilterBuilderModal } from "../ui/FilterBuilderModal";
+import { SemanticUnitDeleteModal } from "../../semantic-units/SemanticUnitDeleteModal";
+import type { SemanticUnitDefinition, SemanticUnitInstance } from "../../semantic-units/types";
 import type {
   CreateDocumentFieldInput,
   DocumentFieldDefinition,
@@ -22,6 +24,7 @@ const MANAGER_FILTER_CONTEXT = "document-manager";
 
 export class DocumentMetadataManagerView extends ItemView {
   private unsubscribe: (() => void) | null = null;
+  private semanticUnsubscribe: (() => void) | null = null;
   private refreshTimer: number | null = null;
   private renderGeneration = 0;
   private search = "";
@@ -29,6 +32,10 @@ export class DocumentMetadataManagerView extends ItemView {
   private page = 0;
   private restoreSearchFocus = false;
   private draggedFieldId: string | null = null;
+  private section: "documents" | "semantic-units" = "documents";
+  private semanticSearch = "";
+  private semanticStateFilter: "all" | "locked" = "all";
+  private restoreSemanticSearchFocus = false;
 
   constructor(leaf: WorkspaceLeaf, private readonly controller: DocumentMetadataController) {
     super(leaf);
@@ -39,7 +46,7 @@ export class DocumentMetadataManagerView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "标签与属性管理";
+    return "知识管理";
   }
 
   getIcon(): string {
@@ -48,12 +55,18 @@ export class DocumentMetadataManagerView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.unsubscribe = this.controller.service.subscribe(() => this.scheduleRender());
+    if (this.controller.semanticUnits) {
+      this.semanticSearch = this.controller.semanticUnits.store.getManagerSearch();
+      this.semanticUnsubscribe = this.controller.semanticUnits.store.subscribe(() => this.scheduleRender());
+    }
     await this.render();
   }
 
   async onClose(): Promise<void> {
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.semanticUnsubscribe?.();
+    this.semanticUnsubscribe = null;
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     this.draggedFieldId = null;
   }
@@ -70,13 +83,10 @@ export class DocumentMetadataManagerView extends ItemView {
     const generation = ++this.renderGeneration;
     this.contentEl.empty();
     this.contentEl.addClass("ks-metadata-manager");
-    const fields = this.controller.service.getFields();
-    const allFiles = this.controller.service.getMarkdownFiles();
-
     const header = this.contentEl.createDiv({ cls: "ks-metadata-manager__header" });
     const identity = header.createDiv({ cls: "ks-metadata-manager__identity" });
     const titleGroup = identity.createDiv();
-    titleGroup.createEl("h2", { text: "标签与属性管理" });
+    titleGroup.createEl("h2", { text: "知识管理" });
     const headerActions = header.createDiv({ cls: "ks-metadata-manager__header-actions" });
     const refreshButton = headerActions.createEl("button", {
       cls: "clickable-icon",
@@ -84,14 +94,25 @@ export class DocumentMetadataManagerView extends ItemView {
     });
     setIcon(refreshButton, "refresh-cw");
     refreshButton.addEventListener("click", () => void this.render());
-    const addButton = headerActions.createEl("button", {
-      cls: "ks-metadata-manager__add-field",
-      attr: { "aria-label": "新建字段" },
-    });
-    const addIcon = addButton.createSpan({ cls: "ks-metadata-manager__button-icon" });
-    setIcon(addIcon, "plus");
-    addButton.createSpan({ text: "新建字段" });
-    addButton.addEventListener("click", () => this.openCreateField());
+    if (this.section === "documents") {
+      const addButton = headerActions.createEl("button", {
+        cls: "ks-metadata-manager__add-field",
+        attr: { "aria-label": "新建字段" },
+      });
+      const addIcon = addButton.createSpan({ cls: "ks-metadata-manager__button-icon" });
+      setIcon(addIcon, "plus");
+      addButton.createSpan({ text: "新建字段" });
+      addButton.addEventListener("click", () => this.openCreateField());
+    }
+
+    this.renderSectionSwitch();
+    if (this.section === "semantic-units") {
+      this.renderSemanticUnits();
+      return;
+    }
+
+    const fields = this.controller.service.getFields();
+    const allFiles = this.controller.service.getMarkdownFiles();
 
     const toolbar = this.contentEl.createDiv({ cls: "ks-metadata-manager__toolbar" });
     const toolbarPrimary = toolbar.createDiv({ cls: "ks-metadata-manager__toolbar-primary" });
@@ -278,6 +299,214 @@ export class DocumentMetadataManagerView extends ItemView {
     }
 
     this.renderPagination(filteredFiles.length, pageCount);
+  }
+
+  private renderSectionSwitch(): void {
+    const switcher = this.contentEl.createDiv({
+      cls: "ks-metadata-manager__section-switch",
+      attr: { role: "tablist", "aria-label": "知识管理类型" },
+    });
+    const sections = [
+      { id: "documents" as const, label: "Markdown 标签与属性", icon: "file-text" },
+      { id: "semantic-units" as const, label: "画布语义单位", icon: "boxes" },
+    ];
+    for (const section of sections) {
+      const button = switcher.createEl("button", {
+        cls: "ks-metadata-manager__section-button",
+        attr: {
+          role: "tab",
+          "aria-selected": String(this.section === section.id),
+        },
+      });
+      button.toggleClass("is-active", this.section === section.id);
+      const icon = button.createSpan();
+      setIcon(icon, section.icon);
+      button.createSpan({ text: section.label });
+      button.addEventListener("click", () => {
+        if (this.section === section.id) return;
+        this.section = section.id;
+        void this.render();
+      });
+    }
+  }
+
+  private renderSemanticUnits(): void {
+    const semanticUnits = this.controller.semanticUnits;
+    if (!semanticUnits) {
+      this.renderSemanticEmpty("语义单位功能未能初始化", "现有画布和 Markdown 没有被修改。请重新加载插件后再试。");
+      return;
+    }
+    const units = semanticUnits.store.getUnits();
+    const toolbar = this.contentEl.createDiv({ cls: "ks-metadata-manager__toolbar" });
+    const toolbarPrimary = toolbar.createDiv({ cls: "ks-metadata-manager__toolbar-primary" });
+    const searchWrap = toolbarPrimary.createDiv({ cls: "ks-metadata-manager__search" });
+    const searchIcon = searchWrap.createSpan();
+    setIcon(searchIcon, "search");
+    const searchInput = searchWrap.createEl("input", {
+      type: "search",
+      placeholder: "搜索元素单位名称、文档或画布…",
+      attr: { "aria-label": "搜索画布语义单位" },
+    });
+    searchInput.value = this.semanticSearch;
+    if (this.restoreSemanticSearchFocus) {
+      window.requestAnimationFrame(() => {
+        searchInput.focus();
+        searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+      });
+    }
+    searchInput.addEventListener("blur", () => { this.restoreSemanticSearchFocus = false; });
+    searchInput.addEventListener("input", () => {
+      this.semanticSearch = searchInput.value;
+      this.restoreSemanticSearchFocus = true;
+      this.scheduleRender();
+    });
+    searchInput.addEventListener("change", () => {
+      void semanticUnits.store.setManagerSearch(searchInput.value);
+    });
+    const stateFilters = toolbarPrimary.createDiv({
+      cls: "ks-semantic-manager__state-filters",
+      attr: { role: "group", "aria-label": "按元素单位状态筛选" },
+    });
+    for (const option of [
+      { id: "all" as const, label: "全部" },
+      { id: "locked" as const, label: "已锁定" },
+    ]) {
+      const button = stateFilters.createEl("button", {
+        cls: `ks-semantic-manager__state-filter${this.semanticStateFilter === option.id ? " is-active" : ""}`,
+        text: option.label,
+        attr: { type: "button", "aria-pressed": String(this.semanticStateFilter === option.id) },
+      });
+      button.addEventListener("click", () => {
+        this.semanticStateFilter = option.id;
+        this.scheduleRender();
+      });
+    }
+
+    const query = this.semanticSearch.trim().toLocaleLowerCase();
+    const rows = units.filter((unit) => {
+      const instances = semanticUnits.store.getInstancesForUnit(unit.id);
+      const canvases = instances.map((instance) => instance.canvasPath);
+      const searchMatches = !query || [unit.name, unit.documentPath ?? "无", ...canvases]
+        .some((value) => value.toLocaleLowerCase().includes(query));
+      const stateMatches = this.semanticStateFilter === "all" ||
+        instances.some((instance) => instance.state.locked);
+      return searchMatches && stateMatches;
+    });
+    if (rows.length === 0) {
+      this.renderSemanticEmpty(
+        units.length === 0 ? "还没有画布语义单位" : "没有符合条件的语义单位",
+        units.length === 0
+          ? "后续可在二维画布中框选元素，通过右键菜单建立具名语义单位。"
+          : "请调整搜索内容。",
+      );
+      return;
+    }
+
+    const shell = this.contentEl.createDiv({
+      cls: "ks-metadata-manager__table-shell ks-semantic-manager__table-shell",
+    });
+    const table = shell.createEl("table", {
+      cls: "ks-metadata-manager__table ks-semantic-manager__table",
+    });
+    const head = table.createEl("thead").createEl("tr");
+    head.createEl("th", { text: "元素单位" });
+    head.createEl("th", { text: "依托 Markdown" });
+    head.createEl("th", { text: "所在二维画布" });
+    head.createEl("th", { text: "同步状态" });
+    const body = table.createEl("tbody");
+    for (const unit of rows) {
+      const instances = semanticUnits.store.getInstancesForUnit(unit.id);
+      const canvasPaths = [...new Set(instances.map((instance) => instance.canvasPath))];
+      const row = body.createEl("tr", {
+        cls: "ks-semantic-manager__row",
+        attr: { "aria-label": `元素单位：${unit.name}；右键打开菜单` },
+      });
+      row.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        this.showSemanticUnitMenu(event, unit, instances);
+      });
+      const nameCell = row.createEl("td");
+      const identity = nameCell.createDiv({ cls: "ks-semantic-manager__unit" });
+      const icon = identity.createSpan({ cls: "ks-semantic-manager__unit-icon" });
+      setIcon(icon, unit.kind === "document-backed" ? "file-box" : "box");
+      identity.createSpan({ cls: "ks-semantic-manager__unit-name", text: unit.name });
+      const documentCell = row.createEl("td");
+      if (unit.documentPath) {
+        const documentButton = documentCell.createEl("button", {
+          cls: "ks-semantic-manager__link",
+          text: unit.documentPath,
+          attr: { "aria-label": `打开文档：${unit.documentPath}` },
+        });
+        documentButton.addEventListener("click", () => {
+          const file = this.app.vault.getFileByPath(unit.documentPath ?? "");
+          if (file) void this.app.workspace.getLeaf(false).openFile(file);
+          else new Notice("绑定的 Markdown 文档不存在，语义单位数据已保留。");
+        });
+      } else {
+        documentCell.createSpan({ cls: "ks-semantic-manager__muted", text: "无" });
+      }
+      const canvasCell = row.createEl("td");
+      if (canvasPaths.length === 0) {
+        canvasCell.createSpan({ cls: "ks-semantic-manager__muted", text: "无实例" });
+      } else {
+        const list = canvasCell.createDiv({ cls: "ks-semantic-manager__canvas-list" });
+        for (const path of canvasPaths) list.createSpan({ cls: "ks-semantic-manager__canvas", text: path });
+      }
+      const statusCell = row.createEl("td");
+      const missingCount = instances.reduce((count, instance) => count + instance.missingMemberIds.length, 0);
+      const lockedCount = instances.filter((instance) => instance.state.locked).length;
+      const stateSummary = [
+        `${instances.length} 个同步实例`,
+        lockedCount > 0 ? `${lockedCount} 个锁定` : "",
+      ].filter(Boolean).join(" · ");
+      statusCell.createSpan({
+        cls: `ks-semantic-manager__status${missingCount > 0 ? " is-warning" : ""}`,
+        text: missingCount > 0 ? `${missingCount} 个成员待检查 · ${stateSummary}` : stateSummary,
+      });
+    }
+    const footer = this.contentEl.createDiv({ cls: "ks-metadata-manager__footer" });
+    footer.createSpan({ cls: "ks-metadata-manager__result-count", text: `${rows.length} 个元素单位` });
+  }
+
+  private showSemanticUnitMenu(
+    event: MouseEvent,
+    unit: SemanticUnitDefinition,
+    instances: SemanticUnitInstance[],
+  ): void {
+    const semanticUnits = this.controller.semanticUnits;
+    if (!semanticUnits) return;
+    const menu = new Menu();
+    if (instances.length > 0) {
+      const allLocked = instances.every((instance) => instance.state.locked);
+      menu.addItem((item) => item
+        .setTitle(allLocked ? "解锁全部实例" : "锁定全部实例")
+        .setIcon(allLocked ? "unlock" : "lock")
+        .onClick(() => { void semanticUnits.setUnitInstancesLocked(unit.id, !allLocked); }));
+      menu.addSeparator();
+    }
+    menu.addItem((item) => item
+      .setTitle("删除元素单位")
+      .setIcon("trash-2")
+      .setWarning(true)
+      .setSection("knowledge-suite-semantic-danger")
+      .onClick(() => new SemanticUnitDeleteModal(
+        this.app,
+        unit,
+        instances.length,
+        async () => {
+          await semanticUnits.store.dissolveUnit(unit.id);
+          new Notice("元素单位已删除；画布内容、Markdown 和附件均未改动。");
+        },
+      ).open()));
+    menu.showAtMouseEvent(event);
+  }
+
+  private renderSemanticEmpty(title: string, description: string): void {
+    const empty = this.contentEl.createDiv({ cls: "ks-metadata-manager__empty" });
+    const artwork = empty.createDiv({ cls: "ks-metadata-manager__empty-artwork" });
+    setIcon(artwork, "boxes");
+    empty.createEl("h3", { text: title });
+    empty.createEl("p", { text: description });
   }
 
   private renderFieldHeader(

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- 修复显示元素单位内容后移动画布元素会使紫色高亮错位的问题；下一次拖拽、滚轮或键盘交互会立即收起一次性高亮。
+- 修复语义单位在目标画布首次打开时可能因场景初始化竞态而延迟到第二次打开才补同步的问题。
+- 修复修改源画布后立即 Ctrl+S 并退出时，防抖任务来不及登记修订而导致其他画布反复打开才同步的问题；保存、关闭和激活画布现在都会执行对应检查。
+- 画布语义单位新增非破坏性的实例锁定、画布状态层右键解锁，以及管理页锁定筛选和批量切换；不会写入原生锁定或删除字段，也不提供隐藏、快捷键删除恢复功能。
+
+- Established the canvas semantic-unit safety baseline and versioned data model without scanning or rewriting existing canvases.
+- Added an isolated `semanticUnits` persistence namespace, canonical definitions, explicitly registered instances, revision conflict protection, and data-only dissolve semantics.
+- Added verified byte-for-byte canvas backups and source hash checks as a mandatory safety gate for future semantic-unit canvas writes.
+- Defined semantic identity through per-canvas element ID mappings so ordinary Ctrl+C/V copies remain unrelated visual elements.
+- Unified the existing management entry under a compact Knowledge Management view with separate Markdown metadata and canvas semantic-unit sections.
+- Added a confirmed row context-menu action for deleting a semantic-unit definition and its registrations while explicitly preserving every canvas element, Markdown document, and attachment.
+- Added the first non-destructive 2D semantic-unit workflow: create a named unit from selected elements, optionally bind one Markdown file, highlight registered members, and dissolve only the semantic relationship.
+- Added temporary tinted membership overlays plus safe add/remove-member actions that update semantic registration without moving or deleting the underlying canvas elements.
+- Changed semantic-unit reveal to a non-interactive fixed visual overlay so linked file nodes are highlighted without activating their Markdown links, and clarified the add-member menu wording.
+- Fixed managed 2D file-node activation at its source: canvas navigation now requires a real pointer hit on the drawing surface, ignores menu and toolbar clicks, and reserves ordinary Markdown opening for double-click so single-click remains available for selection.
+- Scoped semantic membership overlays to their originating canvas view so they are destroyed immediately when that view closes or navigates away and can never remain over a Markdown page.
+- Corrected semantic membership overlay alignment by rendering it in the Excalidraw container's local coordinate system instead of mixing viewport-fixed and transformed ancestor coordinates.
+- Added explicit cross-canvas insertion for synchronized instances and unrelated copies, including canonical member remapping, internal bindings, relative layout, embedded image assets, target-canvas backups, and source-hash validation.
+- Added revision-based synchronized-instance propagation: edits update other open canvases immediately, closed canvases apply pending revisions when opened, whole-instance movement remains local, and every target write is backed up and hash-checked.
+- Repaired Markdown-save text ID rewrites for imported instances, switched new live member IDs to the stable eight-character form used by Excalidraw Markdown blocks, and automatically dissolved registrations when an entire visual instance is deleted.
+- Replaced manual Markdown path entry with a hierarchical folder picker that lists only ordinary Markdown documents and excludes canvas files.
+- Captured semantic-unit selections and binary assets before opening the creation dialog so images and file nodes remain available even if the originating canvas view is detached.
 - Made the Markdown document metadata panel directly editable by allowing its native controls to own pointer and keyboard events.
 - Hid the underlying `knowledge-suite-fields` fenced block in Live Preview while preserving the source data in the Markdown file.
 - Redesigned the metadata manager with a cleaner title bar, compact toolbar, native-style folder menu, simplified document count, and consistent Obsidian typography and spacing.

@@ -6,6 +6,7 @@ import { DocumentMetadataService } from "./DocumentMetadataService";
 import { createDocumentFieldsEditorExtension } from "./editorExtension";
 import { MarkdownFieldPanel } from "./MarkdownFieldPanel";
 import type { DocumentMetadataData } from "./types";
+import type SemanticUnitController from "../semantic-units/SemanticUnitController";
 import {
   DOCUMENT_METADATA_MANAGER_VIEW_TYPE,
   DocumentMetadataManagerView,
@@ -17,6 +18,7 @@ export default class DocumentMetadataController {
   constructor(
     public readonly host: ExcalidrawPlugin,
     persistence: KnowledgeSuiteDataNamespace<DocumentMetadataData>,
+    public readonly semanticUnits: SemanticUnitController | null,
   ) {
     this.service = new DocumentMetadataService(host.app, host, persistence);
   }
@@ -31,12 +33,12 @@ export default class DocumentMetadataController {
       DOCUMENT_METADATA_MANAGER_VIEW_TYPE,
       (leaf) => new DocumentMetadataManagerView(leaf, this),
     );
-    this.host.addRibbonIcon("table-properties", "标签与属性管理", () => {
+    this.host.addRibbonIcon("table-properties", "知识管理", () => {
       void this.activateManager();
     });
     this.host.addCommand({
       id: "open-document-metadata-manager",
-      name: "打开标签与属性管理",
+      name: "打开知识管理",
       callback: () => void this.activateManager(),
     });
     this.host.registerEditorExtension(createDocumentFieldsEditorExtension(this));

@@ -2378,6 +2378,9 @@ export default class ExcalidrawView
     await this.save(false, true, true);
     this.plugin.triggerEmbedUpdates();
     await this.loadSceneFiles();
+    if (!this.plugin.semanticUnits?.isProcessingView(this)) {
+      await this.plugin.semanticUnits?.handleCanvasSaved(this);
+    }
     this.semaphores.forceSaving = false;
     if (!silent) {
       new Notice("Save successful", 1000);
@@ -2884,6 +2887,7 @@ export default class ExcalidrawView
     this.exitFullscreen();
 
     await this.forceSaveIfRequired();
+    await this.plugin.semanticUnits?.handleCanvasSaved(this);
     if (this.excalidrawRoot) {
       this.excalidrawRoot.unmount();
       this.excalidrawRoot = null;
@@ -6076,6 +6080,7 @@ export default class ExcalidrawView
       this.previousBackgroundColor = st.viewBackgroundColor;
       this.previousTheme = st.theme;
       this.canvasColorChangeHook(st);
+      this.plugin.semanticUnits?.handleCanvasReady(this);
       return;
     }
     if (
@@ -6118,6 +6123,7 @@ export default class ExcalidrawView
       st.selectedElementIds,
     );
     this.triggerSceneChangeHooks(et, st, files);
+    this.plugin.semanticUnits?.handleSceneChange(this);
   }
 
   private onLibraryChange(items: LibraryItems) {
@@ -7307,6 +7313,8 @@ export default class ExcalidrawView
       api.getAppState().selectedElementIds,
     );
     const areElementsSelected = selectedElementIds.length > 0;
+    const semanticController = this.plugin.semanticUnits;
+    const selectedSemanticInstance = semanticController?.getSelectedInstance(this) ?? null;
 
     if (this.isLinkSelected()) {
       const isFormula =
@@ -7327,6 +7335,91 @@ export default class ExcalidrawView
     }
 
     if (!appState.viewModeEnabled) {
+      if (areElementsSelected && semanticController) {
+        if (selectedSemanticInstance) {
+          contextMenuActions.push([
+            renderContextMenuAction(
+              React,
+              "显示元素单位内容",
+              () => semanticController.highlightSelectedInstance(this),
+              onClose,
+              "showSemanticUnitMembers",
+            ),
+          ]);
+          contextMenuActions.push([
+            renderContextMenuAction(
+              React,
+              selectedSemanticInstance.state.locked ? "解锁元素单位" : "锁定元素单位",
+              () => { void semanticController.toggleSelectedInstanceLocked(this); },
+              onClose,
+              selectedSemanticInstance.state.locked ? "unlockSemanticUnit" : "lockSemanticUnit",
+            ),
+          ]);
+          if (semanticController.canAddSelectionToInstance(this)) {
+            contextMenuActions.push([
+              renderContextMenuAction(
+                React,
+                "将选区内新内容纳入此单位",
+                () => { void semanticController.addSelectionToInstance(this); },
+                onClose,
+                "addToSemanticUnit",
+              ),
+            ]);
+          }
+          if (semanticController.canRemoveSelectionFromInstance(this)) {
+            contextMenuActions.push([
+              renderContextMenuAction(
+                React,
+                "从元素单位移出所选内容",
+                () => { void semanticController.removeSelectionFromInstance(this); },
+                onClose,
+                "removeFromSemanticUnit",
+              ),
+            ]);
+          }
+          contextMenuActions.push([
+            renderContextMenuAction(
+              React,
+              "解除当前元素单位实例",
+              () => { void semanticController.dissolveSelectedInstance(this); },
+              onClose,
+              "dissolveSemanticUnitInstance",
+            ),
+          ]);
+        } else {
+          contextMenuActions.push([
+            renderContextMenuAction(
+              React,
+              "建立画布语义单位",
+              () => semanticController.openCreateFromSelection(this),
+              onClose,
+              "createSemanticUnit",
+            ),
+          ]);
+        }
+      }
+
+      if (!areElementsSelected && semanticController?.store.getUnits().length) {
+        contextMenuActions.push([
+          renderContextMenuAction(
+            React,
+            "引入同步实例",
+            () => semanticController.openImportIntoCanvas(this, "synchronized"),
+            onClose,
+            "insertSynchronizedSemanticUnit",
+          ),
+        ]);
+        contextMenuActions.push([
+          renderContextMenuAction(
+            React,
+            "创建独立副本",
+            () => semanticController.openImportIntoCanvas(this, "independent"),
+            onClose,
+            "insertIndependentSemanticUnitCopy",
+          ),
+        ]);
+      }
+
       const selectedMarkdownImage =
         this.getViewSelectedElements().length === 1 &&
         this.getViewSelectedElements()[0].type === "image" &&

@@ -23,6 +23,7 @@ import {
 	createCustomNodeColorScheme,
 	createSvgBase64DataUrl,
 	findKnowledgeCanvasFolderNode,
+	getKnowledgeCanvasActivationGesture,
 	getKnowledgeCanvasContextTarget,
 	getKnowledgeCanvasFolderActivation,
 	mergeKnowledgeCanvasNodeAppearance,
@@ -599,25 +600,39 @@ export class ExcalidrawIntegration {
 	): () => void {
 		const container = view.containerEl;
 		if (!container || !ea.getViewSelectedElement) return () => undefined;
-		let start: { x: number; y: number; time: number } | null = null;
+		let start: { x: number; y: number; time: number; elementId: string } | null = null;
+		const isCanvasSurfaceEvent = (event: MouseEvent): boolean => {
+			const ElementConstructor = container.ownerDocument.defaultView?.Element;
+			if (!ElementConstructor || !(event.target instanceof ElementConstructor)) return false;
+			return event.target.matches('canvas.excalidraw__canvas');
+		};
 		const onPointerDown = (event: PointerEvent): void => {
-			if (event.button !== 0) return;
-			start = { x: event.clientX, y: event.clientY, time: Date.now() };
+			start = null;
+			if (event.button !== 0 || !isCanvasSurfaceEvent(event)) return;
+			const element = this.getContextMenuHitElement(view, event);
+			if (!element) return;
+			start = {
+				x: event.clientX,
+				y: event.clientY,
+				time: Date.now(),
+				elementId: element.id,
+			};
 		};
 		const onPointerUp = (event: PointerEvent): void => {
-			if (!start || event.button !== 0) return;
+			if (!start || event.button !== 0 || !isCanvasSurfaceEvent(event)) return;
 			const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
 			const elapsed = Date.now() - start.time;
+			const startedElementId = start.elementId;
 			start = null;
 			if (distance > 5 || elapsed > 600) return;
+			const element = this.getContextMenuHitElement(view, event);
+			if (!element || element.id !== startedElementId) return;
+			const data = readKnowledgeCanvasData(element);
+			if (getKnowledgeCanvasActivationGesture(data) !== 'single') return;
 			const openInNewLeaf = event.ctrlKey || event.metaKey;
 			window.setTimeout(() => {
 				const currentFile = resolveCurrentViewFile(file, view.file);
 				if (!this.store.getKnowledgeCanvas(currentFile.path)) return;
-				const element = ea.getViewSelectedElement?.();
-				if (!element) return;
-				const data = readKnowledgeCanvasData(element);
-				if (!data) return;
 				if (data.canvasType && data.path) {
 					void this.openManagedCanvasFile(currentFile, data.path, openInNewLeaf);
 					return;
@@ -636,18 +651,25 @@ export class ExcalidrawIntegration {
 					void this.activateKnowledgeTarget(currentFile, view, ea, { action: data.action }, false);
 					return;
 				}
-				if (data.path && (data.nodeKind === 'note' || data.nodeKind === 'external-note')) {
-					void this.openKnowledgeNote(currentFile, data.path, openInNewLeaf);
-				}
 			}, 0);
 		};
 		const onDoubleClick = (event: MouseEvent): void => {
-			if (event.button !== 0) return;
-			const element = ea.getViewSelectedElement?.();
-			if (!element || readFormulaLatex(element) === null) return;
+			if (event.button !== 0 || !isCanvasSurfaceEvent(event)) return;
+			const element = this.getContextMenuHitElement(view, event);
+			if (!element) return;
+			if (readFormulaLatex(element) !== null) {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				void this.openFormulaEditor(resolveCurrentViewFile(file, view.file), view, ea, element);
+				return;
+			}
+			const data = readKnowledgeCanvasData(element);
+			if (getKnowledgeCanvasActivationGesture(data) !== 'double' || !data?.path) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			void this.openFormulaEditor(resolveCurrentViewFile(file, view.file), view, ea, element);
+			const currentFile = resolveCurrentViewFile(file, view.file);
+			if (!this.store.getKnowledgeCanvas(currentFile.path)) return;
+			void this.openKnowledgeNote(currentFile, data.path, event.ctrlKey || event.metaKey);
 		};
 		const onContextMenu = (event: MouseEvent): void => {
 			const hitElement = this.getContextMenuHitElement(view, event);

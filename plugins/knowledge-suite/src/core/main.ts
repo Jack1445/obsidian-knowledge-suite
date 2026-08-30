@@ -132,6 +132,8 @@ import KnowledgeMapController from "../features/knowledge-map/KnowledgeMapContro
 import type { KnowledgeMapData } from "../features/knowledge-map/data/schema";
 import DocumentMetadataController from "../features/document-metadata/DocumentMetadataController";
 import type { DocumentMetadataData } from "../features/document-metadata/types";
+import SemanticUnitController from "../features/semantic-units/SemanticUnitController";
+import type { SemanticUnitsData } from "../features/semantic-units/types";
 
 declare const PLUGIN_VERSION: string;
 declare const INITIAL_TIMESTAMP: number;
@@ -639,6 +641,7 @@ export default class ExcalidrawPlugin extends Plugin {
   private readonly dataCoordinator: KnowledgeSuiteDataCoordinator;
   public knowledgeMap: KnowledgeMapController | null = null;
   public documentMetadata: DocumentMetadataController | null = null;
+  public semanticUnits: SemanticUnitController | null = null;
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
@@ -893,9 +896,22 @@ export default class ExcalidrawPlugin extends Plugin {
     }
 
     try {
+      this.semanticUnits = new SemanticUnitController(
+        this,
+        this.dataCoordinator.getNamespace<SemanticUnitsData>("semanticUnits"),
+      );
+      await this.semanticUnits.initialize();
+    } catch (error) {
+      this.semanticUnits = null;
+      new Notice("画布语义单位功能初始化失败。", 6000);
+      console.error("Error initializing semantic unit features", error);
+    }
+
+    try {
       this.documentMetadata = new DocumentMetadataController(
         this,
         this.dataCoordinator.getNamespace<DocumentMetadataData>("documentMetadata"),
+        this.semanticUnits,
       );
       await this.documentMetadata.initialize();
     } catch (error) {
@@ -1611,6 +1627,7 @@ export default class ExcalidrawPlugin extends Plugin {
     this.knowledgeMap = null;
     this.documentMetadata?.destroy();
     this.documentMetadata = null;
+    this.semanticUnits = null;
 
     ExcalidrawSidepanelView.onPluginUnload(this);
     const excalidrawViews = getExcalidrawViews(this.app);

@@ -5,6 +5,7 @@ import {
 	createSvgBase64DataUrl,
 	createKnowledgeCanvasLink,
 	findKnowledgeCanvasFolderNode,
+	getKnowledgeCanvasActivationGesture,
 	getKnowledgeCanvasContextTarget,
 	getKnowledgeCanvasFolderActivation,
 	mergeKnowledgeCanvasNodeAppearance,
@@ -167,6 +168,29 @@ describe('knowledge canvas metadata', () => {
 			scope: 'manual',
 			role: 'formula',
 		})).toBe('native');
+	});
+
+	it('keeps file nodes selectable with one click and opens them only by deliberate double-click', () => {
+		expect(getKnowledgeCanvasActivationGesture({
+			managed: true,
+			scope: 'map',
+			role: 'node',
+			nodeKind: 'note',
+			path: 'Projects/Note.md',
+		})).toBe('double');
+		expect(getKnowledgeCanvasActivationGesture({
+			managed: true,
+			scope: 'map',
+			role: 'node',
+			nodeKind: 'folder',
+			action: 'folder',
+			path: 'Projects',
+		})).toBe('single');
+		expect(getKnowledgeCanvasActivationGesture({
+			managed: true,
+			scope: 'manual',
+			role: 'formula',
+		})).toBe('none');
 	});
 
 	it('finds the parent folder button that opened a child canvas', () => {

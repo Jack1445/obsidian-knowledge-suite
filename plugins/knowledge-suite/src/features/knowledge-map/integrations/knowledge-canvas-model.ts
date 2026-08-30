@@ -72,6 +72,7 @@ export interface KnowledgeCanvasLink {
 
 export type KnowledgeCanvasFolderActivation = 'open-child-canvas';
 export type KnowledgeCanvasContextTarget = 'canvas' | 'file' | 'folder' | 'native';
+export type KnowledgeCanvasActivationGesture = 'single' | 'double' | 'none';
 
 export const DEFAULT_KNOWLEDGE_CANVAS_NODE_APPEARANCE: KnowledgeCanvasNodeAppearance = {
 	palette: 'default',
@@ -180,6 +181,25 @@ export function getKnowledgeCanvasContextTarget(
 	if (data.nodeKind === 'folder' || data.nodeKind === 'current-folder') return 'folder';
 	if (data.nodeKind === 'note' || data.nodeKind === 'external-note') return 'file';
 	return 'native';
+}
+
+/**
+ * Ordinary file nodes must remain selectable with a single click. Navigation
+ * is therefore reserved for a deliberate double-click, while structural
+ * canvas controls retain their existing single-click behavior.
+ */
+export function getKnowledgeCanvasActivationGesture(
+	data: KnowledgeCanvasElementData | null,
+): KnowledgeCanvasActivationGesture {
+	if (data?.path && (data.nodeKind === 'note' || data.nodeKind === 'external-note')) {
+		return 'double';
+	}
+	if (data?.canvasType && data.path) return 'single';
+	if (data?.action === 'folder' && data.path) return 'single';
+	if (data?.action === 'back' || data?.action === 'reset' || data?.action === 'root') {
+		return 'single';
+	}
+	return 'none';
 }
 
 export function findKnowledgeCanvasFolderNode<T extends { customData?: unknown }>(
