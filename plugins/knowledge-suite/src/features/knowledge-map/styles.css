@@ -889,8 +889,8 @@
 }
 
 .knowledge-map-canvas-manager-modal {
-	width: min(760px, calc(100vw - 32px));
-	max-width: 760px;
+	width: min(820px, calc(100vw - 32px));
+	max-width: 820px;
 }
 
 .knowledge-map-globe-remove-dialog {
@@ -1132,6 +1132,52 @@
 	background: linear-gradient(145deg, color-mix(in srgb, var(--interactive-accent) 12%, var(--background-primary)), var(--background-primary));
 }
 
+.knowledge-map-canvas-manager__action.is-semantic {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: 46px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 15px;
+	min-height: 108px;
+	padding: 18px 20px;
+	border-color: color-mix(in srgb, #9388ea 34%, var(--background-modifier-border));
+	background:
+		radial-gradient(circle at 88% 20%, color-mix(in srgb, #9388ea 16%, transparent), transparent 30%),
+		linear-gradient(135deg, color-mix(in srgb, #9388ea 9%, var(--background-primary)), var(--background-primary));
+}
+
+.knowledge-map-canvas-manager__action.is-semantic:hover {
+	border-color: color-mix(in srgb, #9388ea 58%, var(--background-modifier-border));
+	box-shadow: 0 12px 32px rgb(70 55 160 / 15%);
+}
+
+.knowledge-map-canvas-manager__action.is-semantic .knowledge-map-canvas-manager__action-icon {
+	width: 44px;
+	height: 44px;
+	margin-bottom: 0;
+	border-radius: 14px;
+	background: color-mix(in srgb, #9388ea 15%, var(--background-primary));
+	color: #9388ea;
+}
+
+.knowledge-map-canvas-manager__action.is-semantic .knowledge-map-canvas-manager__action-icon svg {
+	width: 22px;
+	height: 22px;
+}
+
+.knowledge-map-canvas-manager__action.is-semantic .knowledge-map-canvas-manager__action-title {
+	font-size: var(--font-ui-medium);
+	font-weight: 700;
+}
+
+.knowledge-map-canvas-manager__action.is-semantic .knowledge-map-canvas-manager__action-label {
+	margin-top: 0;
+	padding: 6px 11px;
+	border-radius: 999px;
+	background: color-mix(in srgb, #9388ea 12%, var(--background-primary));
+	color: color-mix(in srgb, #9388ea 78%, var(--text-normal));
+}
+
 .knowledge-map-canvas-manager__action-icon {
 	display: inline-grid;
 	width: 38px;
@@ -1305,6 +1351,14 @@
 
 	.knowledge-map-canvas-manager__action {
 		min-height: 0;
+	}
+
+	.knowledge-map-canvas-manager__action.is-semantic {
+		grid-template-columns: 40px minmax(0, 1fr);
+	}
+
+	.knowledge-map-canvas-manager__action.is-semantic .knowledge-map-canvas-manager__action-label {
+		display: none;
 	}
 
 	.knowledge-map-canvas-list__badge {

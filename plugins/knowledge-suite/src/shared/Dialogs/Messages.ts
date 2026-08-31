@@ -22,6 +22,13 @@ I build this plugin as a labor of love. Curious about the philosophy behind it? 
 - The plugin now uses the unified Knowledge Suite identity and the \`knowledge-suite\` plugin ID.
 - Startup is blocked when the legacy Excalidraw or Knowledge Map plugin is enabled, preventing competing registrations and data writes.
 - Legacy Excalidraw and Knowledge Map data is copied into separate namespaces after an exact backup is written under the new plugin directory. Legacy files are never changed.
+- Added an ephemeral semantic filter canvas that reads only bound Markdown metadata, renders units in adaptive near-1:1 framed previews, and allows moving whole units without creating instances or changing source canvases.
+- Semantic filter cards now provide a context menu for choosing, changing, or unlinking their bound Markdown file. Unlinking never deletes the note or canvas content.
+- Two-dimensional overview surfaces can now zoom out to 5%, including Excalidraw canvases, the Knowledge Map graph, and the semantic filter canvas. Existing custom minimum-zoom values are preserved.
+- Redesigned the semantic-unit filter dialog with a compact visual hierarchy, all/any segmented controls, numbered condition cards, and a clearer empty state.
+- Secondary actions in the semantic-unit filter dialog now use crisp white surfaces and subtle borders while the primary action retains its purple emphasis.
+- Field and operator selectors in filter-condition rows now share the same clean white surface as the dialog's inputs and secondary actions.
+- The semantic filter canvas now supports middle-button drag panning from anywhere in the viewport, while retaining left-button background panning.
 `,
   "2.26.4": `
 ## Added in the custom fork

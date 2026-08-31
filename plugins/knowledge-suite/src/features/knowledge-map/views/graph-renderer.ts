@@ -6,6 +6,7 @@ import type {
 } from '../core/graph';
 import { createEdgePath } from '../services/edge-path';
 import { exceedsDragThreshold } from '../services/pointer-gesture';
+import { clampOverviewZoom } from '../../../core/overviewZoom';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
@@ -237,7 +238,7 @@ export class GraphRenderer {
 			const pointerX = event.clientX - rect.left - rect.width / 2;
 			const pointerY = event.clientY - rect.top - rect.height / 2;
 			const oldZoom = this.viewport.zoom;
-			const newZoom = Math.max(0.25, Math.min(3, oldZoom * Math.exp(-event.deltaY * 0.001)));
+			const newZoom = clampOverviewZoom(oldZoom * Math.exp(-event.deltaY * 0.001), 3);
 			const worldX = (pointerX - this.viewport.x) / oldZoom;
 			const worldY = (pointerY - this.viewport.y) / oldZoom;
 			this.viewport.x = pointerX - worldX * newZoom;

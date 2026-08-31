@@ -1,4 +1,4 @@
-import { Modal, Notice, Setting, setIcon, type App } from "obsidian";
+import { Modal, Notice, setIcon, type App } from "obsidian";
 import type {
   DocumentFieldDefinition,
   DocumentFieldValue,
@@ -21,12 +21,14 @@ const OPERATOR_LABELS: Record<DocumentFilterOperator, string> = {
 export class FilterBuilderModal extends Modal {
   private filter: DocumentFilterDefinition;
   private conditionsEl!: HTMLElement;
+  private conditionCountEl!: HTMLElement;
 
   constructor(
     app: App,
     private readonly fields: DocumentFieldDefinition[],
     initial: DocumentFilterDefinition,
     private readonly onSave: (filter: DocumentFilterDefinition) => Promise<void>,
+    private readonly copy: { title?: string; description?: string } = {},
   ) {
     super(app);
     this.filter = JSON.parse(JSON.stringify(initial)) as DocumentFilterDefinition;
@@ -34,36 +36,55 @@ export class FilterBuilderModal extends Modal {
 
   onOpen(): void {
     this.modalEl.addClass("ks-metadata-modal", "ks-filter-modal");
-    this.setTitle("筛选 Markdown 文档");
-    this.contentEl.createEl("p", {
+    this.setTitle(this.copy.title ?? "筛选 Markdown 文档");
+    const introduction = this.contentEl.createDiv({ cls: "ks-filter-modal__intro" });
+    const introIcon = introduction.createSpan({ cls: "ks-filter-modal__intro-icon" });
+    setIcon(introIcon, "list-filter");
+    introduction.createEl("p", {
       cls: "ks-metadata-modal__description",
-      text: "这套筛选定义由统一元数据服务保存，未来可以直接复用于二维和三维画布。",
+      text: this.copy.description ?? "这套筛选定义由统一元数据服务保存，未来可以直接复用于二维和三维画布。",
     });
-    new Setting(this.contentEl)
-      .setName("条件关系")
-      .setDesc("选择文档需要满足全部条件，还是任意一个条件。")
-      .addDropdown((dropdown) => dropdown
-        .addOption("all", "满足全部条件")
-        .addOption("any", "满足任意条件")
-        .setValue(this.filter.match)
-        .onChange((value) => { this.filter.match = value as "all" | "any"; }));
+
+    const logic = this.contentEl.createDiv({ cls: "ks-filter-modal__logic" });
+    const logicCopy = logic.createDiv({ cls: "ks-filter-modal__logic-copy" });
+    logicCopy.createDiv({ cls: "ks-filter-modal__logic-title", text: "条件关系" });
+    logicCopy.createDiv({ cls: "ks-filter-modal__logic-hint", text: "多个条件如何组合" });
+    const segments = logic.createDiv({ cls: "ks-filter-modal__segments" });
+    const allButton = segments.createEl("button", { text: "全部", attr: { type: "button" } });
+    const anyButton = segments.createEl("button", { text: "任一", attr: { type: "button" } });
+    const updateSegments = (): void => {
+      allButton.toggleClass("is-selected", this.filter.match === "all");
+      anyButton.toggleClass("is-selected", this.filter.match === "any");
+      allButton.setAttr("aria-pressed", String(this.filter.match === "all"));
+      anyButton.setAttr("aria-pressed", String(this.filter.match === "any"));
+    };
+    allButton.addEventListener("click", () => {
+      this.filter.match = "all";
+      updateSegments();
+    });
+    anyButton.addEventListener("click", () => {
+      this.filter.match = "any";
+      updateSegments();
+    });
+    updateSegments();
 
     const section = this.contentEl.createDiv({ cls: "ks-filter-modal__section" });
     const sectionHeader = section.createDiv({ cls: "ks-filter-modal__section-header" });
-    sectionHeader.createDiv({ text: "筛选条件" });
-    const addButton = sectionHeader.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "添加筛选条件" } });
-    setIcon(addButton, "plus");
-    addButton.addEventListener("click", () => {
-      const field = this.fields[0];
-      if (!field) return;
-      this.filter.conditions.push({ fieldId: field.id, operator: "equals", value: undefined });
-      this.renderConditions();
+    const sectionIdentity = sectionHeader.createDiv({ cls: "ks-filter-modal__section-identity" });
+    sectionIdentity.createDiv({ text: "筛选条件" });
+    this.conditionCountEl = sectionIdentity.createSpan({ cls: "ks-filter-modal__count" });
+    const addButton = sectionHeader.createEl("button", {
+      cls: "ks-filter-modal__add",
+      attr: { type: "button", "aria-label": "添加筛选条件" },
     });
+    setIcon(addButton, "plus");
+    addButton.createSpan({ text: "添加条件" });
+    addButton.addEventListener("click", () => this.addCondition());
     this.conditionsEl = section.createDiv({ cls: "ks-filter-modal__conditions" });
     this.renderConditions();
 
     const actions = this.contentEl.createDiv({ cls: "ks-metadata-modal__actions" });
-    const clearButton = actions.createEl("button", { text: "清除筛选" });
+    const clearButton = actions.createEl("button", { cls: "ks-filter-modal__clear", text: "清除筛选" });
     clearButton.addEventListener("click", () => {
       clearButton.disabled = true;
       void this.onSave({ match: "all", conditions: [] })
@@ -73,9 +94,10 @@ export class FilterBuilderModal extends Modal {
           new Notice(error instanceof Error ? error.message : "无法清除筛选条件。");
         });
     });
-    const cancelButton = actions.createEl("button", { text: "取消" });
+    const actionGroup = actions.createDiv({ cls: "ks-filter-modal__action-group" });
+    const cancelButton = actionGroup.createEl("button", { cls: "ks-filter-modal__cancel", text: "取消" });
     cancelButton.addEventListener("click", () => this.close());
-    const saveButton = actions.createEl("button", { cls: "mod-cta", text: "应用筛选" });
+    const saveButton = actionGroup.createEl("button", { cls: "mod-cta ks-filter-modal__apply", text: "应用筛选" });
     saveButton.addEventListener("click", () => {
       saveButton.disabled = true;
       void this.onSave(this.filter)
@@ -93,8 +115,20 @@ export class FilterBuilderModal extends Modal {
 
   private renderConditions(): void {
     this.conditionsEl.empty();
+    this.conditionCountEl.setText(String(this.filter.conditions.length));
     if (this.filter.conditions.length === 0) {
-      this.conditionsEl.createDiv({ cls: "ks-filter-modal__empty", text: "尚未添加条件；当前显示全部文档。" });
+      const empty = this.conditionsEl.createDiv({ cls: "ks-filter-modal__empty" });
+      const icon = empty.createSpan({ cls: "ks-filter-modal__empty-icon" });
+      setIcon(icon, "list-plus");
+      empty.createDiv({ cls: "ks-filter-modal__empty-title", text: "暂无筛选条件" });
+      empty.createDiv({ cls: "ks-filter-modal__empty-hint", text: "留空时显示全部文档" });
+      const firstCondition = empty.createEl("button", {
+        cls: "ks-filter-modal__empty-add",
+        attr: { type: "button" },
+      });
+      setIcon(firstCondition, "plus");
+      firstCondition.createSpan({ text: "添加第一个条件" });
+      firstCondition.addEventListener("click", () => this.addCondition());
       return;
     }
     this.filter.conditions.forEach((condition, index) => {
@@ -104,6 +138,7 @@ export class FilterBuilderModal extends Modal {
 
   private renderCondition(condition: DocumentFilterCondition, index: number): void {
     const row = this.conditionsEl.createDiv({ cls: "ks-filter-modal__condition" });
+    row.createSpan({ cls: "ks-filter-modal__index", text: String(index + 1) });
     const fieldSelect = row.createEl("select", { cls: "dropdown", attr: { "aria-label": "筛选字段" } });
     for (const field of this.fields) fieldSelect.createEl("option", { value: field.id, text: field.name });
     fieldSelect.value = condition.fieldId;
@@ -136,6 +171,13 @@ export class FilterBuilderModal extends Modal {
       this.filter.conditions.splice(index, 1);
       this.renderConditions();
     });
+  }
+
+  private addCondition(): void {
+    const field = this.fields[0];
+    if (!field) return;
+    this.filter.conditions.push({ fieldId: field.id, operator: "equals", value: undefined });
+    this.renderConditions();
   }
 
   private renderValueEditor(

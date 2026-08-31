@@ -1,4 +1,5 @@
 import { Modal, setIcon, TFile } from 'obsidian';
+import { t } from '../../../lang/helpers';
 import type KnowledgeMapController from '../KnowledgeMapController';
 import type { FolderGraph, SavedNodePosition } from '../core/graph';
 import { canvasDisplayName } from '../services/canvas-tree';
@@ -30,7 +31,7 @@ export class CanvasManagerModal extends Modal {
 			'2维画布',
 			'以当前文件夹生成可继续展开子画布的二维知识结构。',
 			'新建',
-			true,
+			'primary',
 			() => void this.plugin.excalidraw.createKnowledgeCanvas(this.folderPath, this.parentCanvasPath),
 		);
 		this.addAction(
@@ -39,8 +40,17 @@ export class CanvasManagerModal extends Modal {
 			'3维画布',
 			'新建一张空白地球画布，可从文件列表拖入文件或文件夹。',
 			'新建',
-			false,
+			'default',
 			() => void this.plugin.createGlobeCanvas(this.folderPath, this.parentCanvasPath),
+		);
+		this.addAction(
+			actions,
+			'scan-search',
+			t('SEMANTIC_FILTER_CANVAS_ACTION_TITLE'),
+			t('SEMANTIC_FILTER_CANVAS_ACTION_DESC'),
+			t('SEMANTIC_FILTER_CANVAS_ACTION_OPEN'),
+			'semantic',
+			() => this.plugin.openSemanticFilterCanvas(),
 		);
 
 		const drawings = this.plugin.store.getKnowledgeCanvasEntries()
@@ -74,11 +84,11 @@ export class CanvasManagerModal extends Modal {
 		title: string,
 		description: string,
 		actionLabel: string,
-		primary: boolean,
+		variant: 'primary' | 'default' | 'semantic',
 		onClick: () => void,
 	): void {
 		const button = parent.createEl('button', {
-			cls: `knowledge-map-canvas-manager__action${primary ? ' is-primary' : ''}`,
+			cls: `knowledge-map-canvas-manager__action is-${variant}`,
 		});
 		const icon = button.createSpan({ cls: 'knowledge-map-canvas-manager__action-icon' });
 		setIcon(icon, iconName);

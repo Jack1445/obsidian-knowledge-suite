@@ -137,6 +137,36 @@ describe("semantic unit store", () => {
     expect(store.getInstance(other.instance.id)?.state.locked).toBe(false);
   });
 
+  it("changes or removes a Markdown relationship without touching unit content or instances", async () => {
+    const { store } = createStore();
+    await store.load();
+    const created = await store.createUnitWithInstance({
+      name: "可换依托单位",
+      documentPath: "旧文件.md",
+      content,
+      instance: {
+        canvasPath: "Canvas.md",
+        memberElementIds: { "member-a": "live-a", "member-b": "live-b" },
+        origin: { x: 12, y: 24 },
+      },
+    });
+
+    await store.updateUnitDocumentPath(created.unit.id, " /论文阅读笔记\\新文件.md ");
+    const rebound = store.getUnit(created.unit.id);
+    expect(rebound?.documentPath).toBe("论文阅读笔记/新文件.md");
+    expect(rebound?.kind).toBe("document-backed");
+    expect(rebound?.revision).toBe(created.unit.revision);
+    expect(rebound?.content).toEqual(created.unit.content);
+    expect(store.getInstance(created.instance.id)).toEqual(created.instance);
+
+    await store.updateUnitDocumentPath(created.unit.id, null);
+    const unbound = store.getUnit(created.unit.id);
+    expect(unbound?.documentPath).toBeNull();
+    expect(unbound?.kind).toBe("free");
+    expect(unbound?.content).toEqual(created.unit.content);
+    expect(store.getInstance(created.instance.id)).toEqual(created.instance);
+  });
+
   it("stops stale canonical writes and leaves the current revision intact", async () => {
     const { store } = createStore();
     await store.load();

@@ -11,6 +11,10 @@ import {
   DOCUMENT_METADATA_MANAGER_VIEW_TYPE,
   DocumentMetadataManagerView,
 } from "./views/DocumentMetadataManagerView";
+import {
+  SEMANTIC_FILTER_CANVAS_VIEW_TYPE,
+  SemanticFilterCanvasView,
+} from "../semantic-filter-canvas/SemanticFilterCanvasView";
 
 export default class DocumentMetadataController {
   public readonly service: DocumentMetadataService;
@@ -33,6 +37,12 @@ export default class DocumentMetadataController {
       DOCUMENT_METADATA_MANAGER_VIEW_TYPE,
       (leaf) => new DocumentMetadataManagerView(leaf, this),
     );
+    if (this.semanticUnits) {
+      this.host.registerView(
+        SEMANTIC_FILTER_CANVAS_VIEW_TYPE,
+        (leaf) => new SemanticFilterCanvasView(leaf, this),
+      );
+    }
     this.host.addRibbonIcon("table-properties", "知识管理", () => {
       void this.activateManager();
     });
@@ -72,7 +82,19 @@ export default class DocumentMetadataController {
     await this.app.workspace.revealLeaf(leaf);
   }
 
+  public async activateSemanticFilterCanvas(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(SEMANTIC_FILTER_CANVAS_VIEW_TYPE)[0];
+    if (existing) {
+      await this.app.workspace.revealLeaf(existing);
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: SEMANTIC_FILTER_CANVAS_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
+  }
+
   destroy(): void {
     this.app.workspace.detachLeavesOfType(DOCUMENT_METADATA_MANAGER_VIEW_TYPE);
+    this.app.workspace.detachLeavesOfType(SEMANTIC_FILTER_CANVAS_VIEW_TYPE);
   }
 }

@@ -1,4 +1,5 @@
 import { ItemView, Menu, Notice, setIcon, type TFile, type WorkspaceLeaf } from "obsidian";
+import { t } from "../../../lang/helpers";
 import { setStyle } from "../../../utils/styleUtils";
 import type DocumentMetadataController from "../DocumentMetadataController";
 import { FieldDefinitionModal } from "../ui/FieldDefinitionModal";
@@ -10,6 +11,7 @@ import {
 import { FieldValueModal } from "../ui/FieldValueModal";
 import { FilterBuilderModal } from "../ui/FilterBuilderModal";
 import { SemanticUnitDeleteModal } from "../../semantic-units/SemanticUnitDeleteModal";
+import { SemanticMarkdownPickerModal } from "../../semantic-units/SemanticMarkdownPickerModal";
 import type { SemanticUnitDefinition, SemanticUnitInstance } from "../../semantic-units/types";
 import type {
   CreateDocumentFieldInput,
@@ -476,6 +478,18 @@ export class DocumentMetadataManagerView extends ItemView {
     const semanticUnits = this.controller.semanticUnits;
     if (!semanticUnits) return;
     const menu = new Menu();
+    menu.addItem((item) => item
+      .setTitle(t("SEMANTIC_FILTER_MARKDOWN_CHANGE"))
+      .setIcon("file-cog")
+      .onClick(() => this.openSemanticMarkdownPicker(unit.id, unit.documentPath)));
+    if (unit.documentPath) {
+      menu.addItem((item) => item
+        .setTitle(t("SEMANTIC_FILTER_MARKDOWN_UNLINK"))
+        .setIcon("unlink")
+        .setWarning(true)
+        .onClick(() => { void this.updateSemanticMarkdownRelationship(unit.id, null); }));
+    }
+    menu.addSeparator();
     if (instances.length > 0) {
       const allLocked = instances.every((instance) => instance.state.locked);
       menu.addItem((item) => item
@@ -499,6 +513,36 @@ export class DocumentMetadataManagerView extends ItemView {
         },
       ).open()));
     menu.showAtMouseEvent(event);
+  }
+
+  private openSemanticMarkdownPicker(unitId: string, selectedPath: string | null): void {
+    new SemanticMarkdownPickerModal(
+      this.app,
+      selectedPath,
+      (file) => this.controller.service.isManagedMarkdownFile(file),
+      (path) => {
+        if (path === selectedPath) return;
+        void this.updateSemanticMarkdownRelationship(unitId, path);
+      },
+    ).open();
+  }
+
+  private async updateSemanticMarkdownRelationship(
+    unitId: string,
+    documentPath: string | null,
+  ): Promise<void> {
+    const semanticUnits = this.controller.semanticUnits;
+    if (!semanticUnits) return;
+    try {
+      await semanticUnits.store.updateUnitDocumentPath(unitId, documentPath);
+      new Notice(documentPath
+        ? t("SEMANTIC_FILTER_MARKDOWN_UPDATED").replace("{PATH}", documentPath)
+        : t("SEMANTIC_FILTER_MARKDOWN_UNLINKED"));
+    } catch (error) {
+      new Notice(error instanceof Error
+        ? error.message
+        : t("SEMANTIC_FILTER_MARKDOWN_UPDATE_FAILED"));
+    }
   }
 
   private renderSemanticEmpty(title: string, description: string): void {

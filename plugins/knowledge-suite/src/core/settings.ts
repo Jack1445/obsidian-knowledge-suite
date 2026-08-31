@@ -48,6 +48,7 @@ import {
 } from "src/constants/constSettingsTags";
 import { HotkeyEditor } from "src/shared/Dialogs/HotkeyEditor";
 import { getExcalidrawViews } from "src/utils/obsidianUtils";
+import { OVERVIEW_MIN_ZOOM } from "src/core/overviewZoom";
 import { createSliderWithText } from "src/utils/sliderUtils";
 import {
   PDFExportSettingsComponent,
@@ -651,7 +652,7 @@ export const DEFAULT_SETTINGS: ExcalidrawSettings = {
   zoomToFitOnResize: false,
   zoomToFitMaxLevel: 2,
   zoomStep: 0.05,
-  zoomMin: 0.1,
+  zoomMin: OVERVIEW_MIN_ZOOM,
   zoomMax: 30,
   linkPrefix: "",
   urlPrefix: "",

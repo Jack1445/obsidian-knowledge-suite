@@ -164,6 +164,21 @@ export class SemanticUnitStore {
     });
   }
 
+  /** Updates only the Markdown relationship; canvas content and instances stay untouched. */
+  public async updateUnitDocumentPath(
+    unitId: string,
+    documentPath: string | null,
+  ): Promise<void> {
+    await this.mutate((data) => {
+      const unit = data.units[unitId];
+      if (!unit) throw new Error("元素单位不存在。");
+      const normalizedDocumentPath = normalizedPath(documentPath);
+      unit.documentPath = normalizedDocumentPath;
+      unit.kind = normalizedDocumentPath ? "document-backed" : "free";
+      unit.updatedAt = new Date().toISOString();
+    });
+  }
+
   public async replaceCanonicalContent(
     unitId: string,
     expectedRevision: number,

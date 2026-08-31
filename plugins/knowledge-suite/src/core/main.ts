@@ -46,6 +46,7 @@ import {
   KNOWN_AI_TEXT_MODEL_CONFIGS,
   KNOWN_AI_IMAGE_MODEL_CONFIGS,
 } from "./settings";
+import { OVERVIEW_MIN_ZOOM } from "./overviewZoom";
 import { ExcalidrawAutomate } from "../shared/ExcalidrawAutomate";
 import { initExcalidrawAutomate } from "src/utils/excalidrawAutomateUtils";
 import { t } from "../lang/helpers";
@@ -1717,6 +1718,10 @@ export default class ExcalidrawPlugin extends Plugin {
     const decryptedSettings = decryptPersistedAPIKeys(persistedSettings);
     let didSettingsMigration = false;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, decryptedSettings);
+    if (decryptedSettings.zoomMin === 0.1) {
+      this.settings.zoomMin = OVERVIEW_MIN_ZOOM;
+      didSettingsMigration = true;
+    }
     if (typeof decryptedSettings.libraryStorageMode === "undefined") {
       const legacyLibrary: unknown =
         typeof decryptedSettings.library === "string" &&

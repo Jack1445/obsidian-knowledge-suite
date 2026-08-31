@@ -107,6 +107,14 @@ export default class KnowledgeMapController {
 		new CanvasManagerModal(this, folderPath, null, null, parentCanvasPath).open();
 	}
 
+	openSemanticFilterCanvas(): void {
+		if (!this.host.documentMetadata?.semanticUnits) {
+			new Notice('语义筛选画布尚未就绪，请重新加载插件后再试。');
+			return;
+		}
+		void this.host.documentMetadata.activateSemanticFilterCanvas();
+	}
+
 	async createGlobeCanvas(folderPath: string, parentCanvasPath?: string): Promise<string | null> {
 		const normalized = normalizeFolderPath(folderPath);
 		const timestamp = new Date().toISOString().replaceAll(':', '-').replace('T', ' ').slice(0, 19);

@@ -119,7 +119,11 @@ if (!isLib) {
     "./src/features/document-metadata/styles.css",
     "utf8",
   );
-  const styles = excalidraw_styles + plugin_styles + knowledge_map_styles + document_metadata_styles;
+  const semantic_filter_styles = fs.readFileSync(
+    "./src/features/semantic-filter-canvas/styles.css",
+    "utf8",
+  );
+  const styles = excalidraw_styles + plugin_styles + knowledge_map_styles + document_metadata_styles + semantic_filter_styles;
   cssnano()
     .process(styles, {
       from: path.resolve("styles.css"),
