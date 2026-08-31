@@ -40,7 +40,6 @@ import {
 import {
   ExcalidrawSettings,
   DEFAULT_SETTINGS,
-  ExcalidrawSettingTab,
   cloneKnownAIProviderProfiles,
   cloneModelConfigs,
   KNOWN_AI_TEXT_MODEL_CONFIGS,
@@ -135,6 +134,7 @@ import DocumentMetadataController from "../features/document-metadata/DocumentMe
 import type { DocumentMetadataData } from "../features/document-metadata/types";
 import SemanticUnitController from "../features/semantic-units/SemanticUnitController";
 import type { SemanticUnitsData } from "../features/semantic-units/types";
+import { KnowledgeSuiteSettingTab } from "./KnowledgeSuiteSettingTab";
 
 declare const PLUGIN_VERSION: string;
 declare const INITIAL_TIMESTAMP: number;
@@ -853,6 +853,8 @@ export default class ExcalidrawPlugin extends Plugin {
     addIcon(SCRIPTENGINE_ICON_NAME, SCRIPTENGINE_ICON);
     addIcon(EXPORT_IMG_ICON_NAME, EXPORT_IMG_ICON);
 
+    this.addSettingTab(new KnowledgeSuiteSettingTab(this.app, this));
+
     try {
       void this.loadSettings({ reEnableAutosave: true }).then(() =>
         this.onloadCheckForOnceOffSettingsUpdates(),
@@ -939,7 +941,6 @@ export default class ExcalidrawPlugin extends Plugin {
     if (updateSettings) {
       await this.saveSettings();
     }
-    this.addSettingTab(new ExcalidrawSettingTab(this.app, this));
     this.settingsReady = true;
   }
 

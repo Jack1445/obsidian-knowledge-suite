@@ -19,6 +19,8 @@ I build this plugin as a labor of love. Curious about the philosophy behind it? 
 `,
   "0.1.0-beta.1": `
 ## Knowledge Suite beta
+- Added an optional, collapsed “Default paths and names” section to the minimal global settings page. Separate 2D and 3D managed-canvas names and storage folders affect only newly created canvases; blank values preserve the existing behavior.
+- Replaced the duplicate global settings tabs with one minimal, control-free information page. Inherited Excalidraw integration, promotional, update, and experimental settings remain hidden; contextual controls stay beside the features they affect, while mandatory backup and compatibility safeguards stay active.
 - The plugin now uses the unified Knowledge Suite identity and the \`knowledge-suite\` plugin ID.
 - Startup is blocked when the legacy Excalidraw or Knowledge Map plugin is enabled, preventing competing registrations and data writes.
 - Legacy Excalidraw and Knowledge Map data is copied into separate namespaces after an exact backup is written under the new plugin directory. Legacy files are never changed.

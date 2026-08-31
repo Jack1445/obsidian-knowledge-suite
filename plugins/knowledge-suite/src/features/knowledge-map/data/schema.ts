@@ -1,6 +1,6 @@
 import type { FolderMapState, SavedNodePosition } from '../core/graph';
 
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 export type KnowledgeCanvasType = '2d' | '3d';
 
@@ -23,6 +23,10 @@ export interface KnowledgeMapSettings {
 	showLabels: boolean;
 	nodeScale: number;
 	linkScale: number;
+	default2dCanvasName: string;
+	default3dCanvasName: string;
+	default2dCanvasFolder: string;
+	default3dCanvasFolder: string;
 }
 
 export interface KnowledgeMapData {
@@ -41,6 +45,10 @@ export const DEFAULT_SETTINGS: KnowledgeMapSettings = {
 	showLabels: true,
 	nodeScale: 1,
 	linkScale: 1,
+	default2dCanvasName: '',
+	default3dCanvasName: '',
+	default2dCanvasFolder: '',
+	default3dCanvasFolder: '',
 };
 
 export function createDefaultData(): KnowledgeMapData {

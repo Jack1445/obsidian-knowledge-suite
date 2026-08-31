@@ -14,12 +14,24 @@ describe('plugin data migrations', () => {
 			},
 		});
 
-		expect(migrated.schemaVersion).toBe(8);
+		expect(migrated.schemaVersion).toBe(9);
 		expect(migrated.knowledgeCanvases['Canvas.excalidraw.md']?.layouts).toEqual({});
 		expect(migrated.knowledgeCanvases['Canvas.excalidraw.md']?.canvasType).toBe('2d');
 		expect(migrated.canvasReferences).toEqual({});
 		expect(migrated.canvasOrder).toEqual({});
 		expect(migrated.customNodeColors).toEqual([]);
+	});
+
+	it('adds optional canvas creation defaults without changing existing behavior', () => {
+		const migrated = migrateData({ schemaVersion: 8, settings: { nodeScale: 1.2 } });
+
+		expect(migrated.settings).toMatchObject({
+			nodeScale: 1.2,
+			default2dCanvasName: '',
+			default3dCanvasName: '',
+			default2dCanvasFolder: '',
+			default3dCanvasFolder: '',
+		});
 	});
 
 	it('normalizes and limits saved custom node colors', () => {

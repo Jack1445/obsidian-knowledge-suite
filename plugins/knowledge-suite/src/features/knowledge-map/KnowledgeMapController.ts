@@ -1,11 +1,10 @@
-import { Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
+import { Notice, TFile, TFolder, type App, type WorkspaceLeaf } from 'obsidian';
 import { ICON_NAME } from '../../constants/constants';
 import type ExcalidrawPlugin from '../../core/main';
 import type { KnowledgeSuiteDataNamespace } from '../../core/KnowledgeSuiteDataCoordinator';
 import type { KnowledgeMapData } from './data/schema';
 import { KnowledgeMapStore } from './data/store';
 import { ExcalidrawIntegration } from './integrations/excalidraw';
-import { KnowledgeMapSettingTab } from './settings/settings-tab';
 import { KNOWLEDGE_MAP_GLOBE_VIEW_TYPE, GlobeView } from './views/globe-view';
 import { KNOWLEDGE_MAP_VIEW_TYPE, KnowledgeMapView } from './views/knowledge-map-view';
 import {
@@ -24,6 +23,10 @@ import {
 	GLOBE_CANVAS_FILE_EXTENSION,
 	serializeGlobeCanvasDocument,
 } from './globe/globe-canvas-document';
+import {
+	resolveCanvasBaseName,
+	resolveCanvasStorageFolder,
+} from './services/canvas-creation-defaults';
 
 const EXCALIDRAW_VIEW_TYPE = 'excalidraw';
 
@@ -95,8 +98,6 @@ export default class KnowledgeMapController {
 			name: '打开画布树',
 			callback: () => void this.activateCanvasTree(),
 		});
-		this.host.addSettingTab(new KnowledgeMapSettingTab(this.app, this.host, this));
-
 		this.app.workspace.onLayoutReady(() => {
 			this.registerVaultEvents();
 			this.excalidraw.bindOpenViews();
@@ -117,13 +118,15 @@ export default class KnowledgeMapController {
 
 	async createGlobeCanvas(folderPath: string, parentCanvasPath?: string): Promise<string | null> {
 		const normalized = normalizeFolderPath(folderPath);
-		const timestamp = new Date().toISOString().replaceAll(':', '-').replace('T', ' ').slice(0, 19);
-		const baseName = `${folderDisplayName(normalized)} 3维画布 ${timestamp}`;
+		const baseName = resolveCanvasBaseName('3d', normalized, this.store.settings);
+		const configuredStorageFolder = resolveCanvasStorageFolder('3d', normalized, this.store.settings) ?? '/';
+		const storageFolder = await this.ensureStorageFolder(configuredStorageFolder);
+		if (!storageFolder) return null;
 		let index = 1;
-		let filePath = this.globeCanvasPath(normalized, baseName);
+		let filePath = this.globeCanvasPath(storageFolder, baseName);
 		while (this.app.vault.getAbstractFileByPath(filePath)) {
 			index += 1;
-			filePath = this.globeCanvasPath(normalized, `${baseName} ${index}`);
+			filePath = this.globeCanvasPath(storageFolder, `${baseName} ${index}`);
 		}
 		try {
 			const file = await this.app.vault.create(
@@ -137,6 +140,23 @@ export default class KnowledgeMapController {
 			return file.path;
 		} catch {
 			new Notice('无法创建3维画布文件。');
+			return null;
+		}
+	}
+
+	private async ensureStorageFolder(folderPath: string): Promise<string | null> {
+		if (folderPath === '/') return folderPath;
+		const existing = this.app.vault.getAbstractFileByPath(folderPath);
+		if (existing instanceof TFolder) return folderPath;
+		if (existing) {
+			new Notice(`默认保存路径“${folderPath}”不是文件夹。`);
+			return null;
+		}
+		try {
+			await this.app.vault.createFolder(folderPath);
+			return folderPath;
+		} catch {
+			new Notice(`无法创建默认保存路径“${folderPath}”。`);
 			return null;
 		}
 	}

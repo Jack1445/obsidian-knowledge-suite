@@ -16,6 +16,10 @@ import type { KnowledgeMapStore } from '../data/store';
 import { VaultGraphBuilder } from '../obsidian/vault-graph-builder';
 import { createInitialPositions } from '../services/initial-layout';
 import { canvasDisplayName, canvasNodeDisplayName } from '../services/canvas-tree';
+import {
+	resolveCanvasBaseName,
+	resolveCanvasStorageFolder,
+} from '../services/canvas-creation-defaults';
 import { KnowledgeFormulaDialog, renderLatexToSvgDataUrl } from '../ui/formula-dialog';
 import {
 	KNOWLEDGE_CANVAS_DATA_KEY,
@@ -281,11 +285,6 @@ interface ExcalidrawAutomateLike {
 const getExcalidrawAutomate = (): ExcalidrawAutomateLike | undefined =>
 	window.ExcalidrawAutomate as unknown as ExcalidrawAutomateLike | undefined;
 
-function drawingName(prefix: string): string {
-	const timestamp = new Date().toISOString().replaceAll(':', '-').replace('T', ' ').slice(0, 19);
-	return `${prefix} ${timestamp}`;
-}
-
 function elementData(
 	scope: KnowledgeCanvasElementData['scope'],
 	role: KnowledgeCanvasElementData['role'],
@@ -344,10 +343,13 @@ export class ExcalidrawIntegration {
 	async createBlank(folderPath: string): Promise<void> {
 		const ea = this.requireApi();
 		if (!ea) return;
+		const storageFolder = resolveCanvasStorageFolder('2d', folderPath, this.store.settings);
+		const availableFolder = await this.ensureStorageFolder(storageFolder);
+		if (availableFolder === null) return;
 		ea.reset();
 		await ea.create({
-			filename: drawingName('空白画布'),
-			foldername: folderPath === ROOT_PATH ? undefined : folderPath,
+			filename: resolveCanvasBaseName('2d', folderPath, this.store.settings, new Date(), '空白画布'),
+			foldername: availableFolder,
 			onNewPane: true,
 			plaintext: '由2维画布插件创建的普通 Excalidraw 画布。',
 		});
@@ -362,12 +364,15 @@ export class ExcalidrawIntegration {
 		const normalizedPath = normalizeFolderPath(folderPath);
 		const graph = this.graphBuilder.build(normalizedPath, this.store.settings.showExternalLinks);
 		const positions = createInitialPositions(graph, this.store.getMapState(normalizedPath)?.nodes ?? {});
+		const storageFolder = resolveCanvasStorageFolder('2d', normalizedPath, this.store.settings);
+		const availableFolder = await this.ensureStorageFolder(storageFolder);
+		if (availableFolder === null) return null;
 
 		ea.reset();
 		await this.addFolderMapToWorkbench(ea, graph, positions, Boolean(parentCanvasPath));
 		const filePath = await ea.create({
-			filename: drawingName(`${folderDisplayName(normalizedPath)} 2维画布`),
-			foldername: normalizedPath === ROOT_PATH ? undefined : normalizedPath,
+			filename: resolveCanvasBaseName('2d', normalizedPath, this.store.settings),
+			foldername: availableFolder,
 			onNewPane: true,
 			plaintext: [
 				'由2维画布插件创建。',
@@ -380,6 +385,23 @@ export class ExcalidrawIntegration {
 		await this.bindCreatedCanvas(filePath);
 		new Notice(parentCanvasPath ? '子画布已创建。' : '2维画布已创建。');
 		return filePath;
+	}
+
+	private async ensureStorageFolder(folderPath: string | undefined): Promise<string | undefined | null> {
+		if (!folderPath || folderPath === ROOT_PATH) return folderPath;
+		const existing = this.app.vault.getAbstractFileByPath(folderPath);
+		if (existing instanceof TFolder) return folderPath;
+		if (existing) {
+			new Notice(`默认保存路径“${folderPath}”不是文件夹。`);
+			return null;
+		}
+		try {
+			await this.app.vault.createFolder(folderPath);
+			return folderPath;
+		} catch {
+			new Notice(`无法创建默认保存路径“${folderPath}”。`);
+			return null;
+		}
 	}
 
 	async createFromGraph(
