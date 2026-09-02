@@ -472,8 +472,9 @@ export class ExcalidrawIntegration {
 				latestElements = elements;
 				if (positionSaveTimer !== null) window.clearTimeout(positionSaveTimer);
 				positionSaveTimer = window.setTimeout(() => {
-					positionSaveTimer = null;
-					const currentFile = resolveCurrentViewFile(file, view.file);
+                positionSaveTimer = null;
+                if (view.file !== file || !this.boundViews.has(view)) return;
+                const currentFile = resolveCurrentViewFile(file, view.file);
 					this.persistCanvasPositions(currentFile, latestElements);
 					this.syncCanvasReferencesFromElements(currentFile, latestElements);
 				}, 150);
@@ -505,17 +506,19 @@ export class ExcalidrawIntegration {
 		// direct pointer handling and shortcuts do not depend on that registration,
 		// so always attach them to the current view. Otherwise Insert formula and
 		// Reset layout disappear until the entire Obsidian app is restarted.
-		this.boundViews.add(view);
-		removeResetMenuOption = this.registerResetMenuOption(file, view, ea);
+        this.boundViews.add(view);
+        const isCurrentBinding = (): boolean =>
+          this.boundViews.has(view) && view.file === file;
+        removeResetMenuOption = this.registerResetMenuOption(file, view, ea);
 		// Partial bold is now implemented by the maintained Excalidraw Core fork.
 		// Do not inject the legacy whole-element B button because it duplicates
 		// the native control and competes for the textarea selection.
 		removeTextControls = (): void => undefined;
-		void this.upgradeManagedMapVisuals(file, view, ea)
-			.then(() => this.upgradeManagedCanvasIcons(view, ea))
-			.then(() => this.upgradeManagedFileNodeVisuals(view, ea))
-			.then(() => this.repairMissingManagedLucideIcons(view, ea))
-			.then(() => this.polishManagedElements(file, ea))
+        void this.upgradeManagedMapVisuals(file, view, ea)
+          .then(() => isCurrentBinding() ? this.upgradeManagedCanvasIcons(view, ea) : undefined)
+          .then(() => isCurrentBinding() ? this.upgradeManagedFileNodeVisuals(view, ea) : undefined)
+          .then(() => isCurrentBinding() ? this.repairMissingManagedLucideIcons(view, ea) : undefined)
+          .then(() => isCurrentBinding() ? this.polishManagedElements(file, ea) : undefined)
 			.catch((error: unknown) => console.error('Unable to repair managed canvas icons', error));
 		return true;
 	}
