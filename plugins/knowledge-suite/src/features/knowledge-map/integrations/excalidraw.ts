@@ -44,6 +44,8 @@ import {
 } from './knowledge-canvas-model';
 import { CustomNodeColorDialog } from '../ui/custom-node-color-dialog';
 import { ManagedNodeIconDialog } from '../ui/managed-node-icon-dialog';
+import type { CaptureUpdateActionType } from '@zsviczian/excalidraw/types/element/src';
+import { viewportCoordsToSceneCoords } from '../../../constants/constants';
 
 const EXCALIDRAW_VIEW_TYPE = 'excalidraw';
 const NODE_SCALE = 1.35;
@@ -124,6 +126,7 @@ interface ExcalidrawElementLike {
 	width?: number;
 	height?: number;
 	isDeleted?: boolean;
+	groupIds?: string[];
 	customData?: Record<string, unknown>;
 }
 
@@ -134,15 +137,22 @@ interface KnowledgeTextStyleData {
 	sourceId?: string;
 }
 
+type BindingGuard = () => boolean;
+
 interface ExcalidrawViewLike {
 	file?: TFile | null;
+	_loaded?: boolean;
+	isLoaded?: boolean;
 	containerEl?: HTMLElement;
 	excalidrawData?: {
+		loaded?: boolean;
+		file?: TFile | null;
 		hasFile?(fileId: string): boolean;
 	};
 	excalidrawAPI?: {
 		getAppState(): {
 			editingTextElement?: ExcalidrawElementLike | null;
+			isLoading?: boolean;
 			zoom?: { value: number };
 			offsetLeft?: number;
 			offsetTop?: number;
@@ -163,6 +173,8 @@ interface ExcalidrawViewLike {
 		}): void;
 	};
 	getViewType(): string;
+	getHookServer?(): ExcalidrawAutomateLike;
+	setHookServer?(ea?: ExcalidrawAutomateLike): void;
 }
 
 interface ExcalidrawStyleLike {
@@ -248,9 +260,12 @@ interface ExcalidrawAutomateLike {
 		save?: boolean,
 		newElementsOnTop?: boolean,
 		shouldRestoreElements?: boolean,
+		captureUpdate?: CaptureUpdateActionType,
+		isCurrent?: BindingGuard,
 	): Promise<boolean>;
 	selectElementsInView?(elements: ExcalidrawElementLike[] | string[]): void;
-	registerThisAsViewEA?(): boolean;
+	registerThisAsViewEA?: () => boolean;
+	destroy?: () => void;
 	setFillStyle?(value: number): string;
 	setStrokeStyle?(value: number): string;
 	setStrokeSharpness?(value: number): string;
@@ -259,7 +274,7 @@ interface ExcalidrawAutomateLike {
 	onLinkClickHook?: (
 		element: ExcalidrawElementLike,
 		linkText: string,
-		event: MouseEvent,
+		event: MouseEvent | null,
 		view: ExcalidrawViewLike,
 		ea: ExcalidrawAutomateLike,
 	) => boolean;
@@ -313,13 +328,45 @@ function readFormulaLatex(element: ExcalidrawElementLike | null | undefined): st
 	return element?.type === 'image' && typeof value === 'string' ? value : null;
 }
 
+/**
+ * A managed node is rendered as a body, icon and label group. Pointer down and
+ * pointer up can therefore legitimately hit different element ids even though
+ * the user clicked the same node. Use the stable semantic identity for managed
+ * elements and retain the element id for ordinary Excalidraw content.
+ */
+function getInteractionTargetKey(element: ExcalidrawElementLike | null | undefined): string | null {
+	if (!element) return null;
+	const data = readKnowledgeCanvasData(element);
+	if (!data) return element.id;
+	const semanticKey = [
+		data.scope,
+		data.canvasType ?? '',
+		data.nodeKind ?? '',
+		data.action ?? '',
+		data.path ?? '',
+	].join('|');
+	if (semanticKey === '||||') return element.id;
+	// Keep duplicated nodes distinct while allowing a click to move between the
+	// body's icon and label, which share Excalidraw's group id.
+	return `${semanticKey}|${element.groupIds?.[0] ?? element.id}`;
+}
+
 export class ExcalidrawIntegration {
 	private readonly graphBuilder: VaultGraphBuilder;
-	private readonly boundViews = new WeakSet<object>();
+	private readonly boundViews = new WeakMap<object, TFile>();
+	private readonly boundEAs = new WeakMap<object, ExcalidrawAutomateLike>();
+	private readonly boundHookRegistrations = new WeakMap<object, boolean>();
+	private readonly pendingEAs = new WeakMap<object, { file: TFile; ea: ExcalidrawAutomateLike }>();
+	private readonly bindingRetries = new WeakSet<object>();
+	private readonly visualUpgradeRuns = new WeakMap<object, {
+		file: TFile;
+		ea: ExcalidrawAutomateLike;
+	}>();
 	private readonly navigationLocks = new Set<string>();
 	private readonly renderingViews = new WeakSet<object>();
 	private readonly stylingViews = new WeakSet<object>();
 	private readonly boldSyncTimers = new WeakMap<object, number>();
+	private disposed = false;
 
 	constructor(
 		private readonly app: App,
@@ -338,6 +385,42 @@ export class ExcalidrawIntegration {
 
 	isKnowledgeCanvas(file: TFile): boolean {
 		return Boolean(this.store.getKnowledgeCanvas(file.path));
+	}
+
+	private isViewReady(view: ExcalidrawViewLike): boolean {
+		const data = view.excalidrawData;
+		const api = view.excalidrawAPI;
+		if (!api) return false;
+		let appState: ReturnType<NonNullable<ExcalidrawViewLike['excalidrawAPI']>['getAppState']>;
+		try {
+			appState = api.getAppState();
+		} catch {
+			// The API can be torn down between a leaf switch and its unload hook.
+			return false;
+		}
+		return Boolean(
+			view._loaded !== false
+			&& view.isLoaded === true
+			&& data?.loaded === true
+			&& data.file === view.file
+			&& appState?.isLoading !== true,
+		);
+	}
+
+	private createBindingGuard(
+		file: TFile | null | undefined,
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+	): BindingGuard {
+		const viewKey = view as unknown as object;
+		return (): boolean => Boolean(
+			!this.disposed
+			&& file
+			&& view.file === file
+			&& this.boundViews.get(viewKey) === file
+			&& this.boundEAs.get(viewKey) === ea
+			&& this.isViewReady(view),
+		);
 	}
 
 	async createBlank(folderPath: string): Promise<void> {
@@ -413,21 +496,196 @@ export class ExcalidrawIntegration {
 	}
 
 	bindOpenViews(): void {
-		for (const leaf of this.app.workspace.getLeavesOfType(EXCALIDRAW_VIEW_TYPE)) this.bindLeaf(leaf);
+		if (this.disposed) return;
+		for (const leaf of this.app.workspace.getLeavesOfType(EXCALIDRAW_VIEW_TYPE)) {
+			void this.bindLeafWhenReady(leaf);
+		}
+	}
+
+	destroy(): void {
+		this.disposed = true;
+		for (const leaf of this.app.workspace.getLeavesOfType(EXCALIDRAW_VIEW_TYPE)) {
+			const view = leaf.view as unknown as ExcalidrawViewLike;
+			const viewKey = view as unknown as object;
+			this.boundEAs.get(viewKey)?.onViewUnloadHook?.(view);
+			this.pendingEAs.get(viewKey)?.ea.destroy?.();
+			this.pendingEAs.delete(viewKey);
+			this.visualUpgradeRuns.delete(viewKey);
+		}
+	}
+
+	/**
+	 * Excalidraw creates its hook server only after the view finishes loading.
+	 * Opening a canvas can therefore emit `file-open` before `registerThisAsViewEA`
+	 * is ready. Retry briefly so managed drop/link hooks are never replaced by
+	 * Excalidraw's native fallback handlers.
+	 */
+	async bindLeafWhenReady(leaf: WorkspaceLeaf | null): Promise<boolean> {
+		if (this.disposed || !leaf) return false;
+		const retryKey = leaf as unknown as object;
+		if (this.bindingRetries.has(retryKey)) return false;
+		this.bindingRetries.add(retryKey);
+		try {
+			for (let attempt = 0; attempt < 300; attempt += 1) {
+				if (this.disposed) return false;
+				const candidate = leaf.view as unknown as ExcalidrawViewLike;
+				if (!candidate || typeof candidate.getViewType !== 'function') return false;
+				let viewType: string;
+				try {
+					viewType = candidate.getViewType();
+				} catch {
+					// A reused leaf can briefly expose a view that is being torn down.
+					await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+					continue;
+				}
+				if (viewType !== EXCALIDRAW_VIEW_TYPE) return false;
+				// Always let bindLeaf tear down a previous binding first. This matters
+				// when a registered canvas is deleted or a reused leaf switches to an
+				// ordinary Excalidraw drawing.
+				let bound = false;
+				try {
+					bound = this.bindLeaf(leaf);
+				} catch (error: unknown) {
+					// A view can be destroyed between the readiness check and hook
+					// registration. Keep the retry alive instead of leaking an
+					// unhandled promise from the workspace event.
+					console.error('Unable to bind Knowledge Suite Excalidraw hooks', error);
+				}
+				if (bound) return true;
+				// Ordinary Excalidraw drawings do not use Knowledge Suite hooks.
+				// A missing file, on the other hand, is a transient state while Obsidian
+				// is attaching a reused leaf to its next drawing, so keep retrying until
+				// the identity is known.
+				if (candidate.file && !this.isKnowledgeCanvas(candidate.file)) return false;
+				await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+			}
+		} finally {
+			this.bindingRetries.delete(retryKey);
+		}
+		return false;
 	}
 
 	bindLeaf(leaf: WorkspaceLeaf | null): boolean {
-		if (!leaf) return false;
+		if (this.disposed || !leaf) return false;
 		const view = leaf.view as unknown as ExcalidrawViewLike;
+		if (!view || typeof view.getViewType !== 'function') return false;
+		const viewKey = view as unknown as object;
 		const file = view.file;
-		if (view.getViewType() !== EXCALIDRAW_VIEW_TYPE || !file || !this.isKnowledgeCanvas(file)) return false;
-		if (this.boundViews.has(view)) return true;
-
+		let viewType: string;
+		try {
+			viewType = view.getViewType();
+		} catch {
+			return false;
+		}
+		const viewIsKnowledgeCanvas = viewType === EXCALIDRAW_VIEW_TYPE
+			&& Boolean(file)
+			&& this.isKnowledgeCanvas(file);
+		const boundFile = this.boundViews.get(viewKey);
+		const boundEa = this.boundEAs.get(viewKey);
+		const pending = this.pendingEAs.get(viewKey);
+		// A leaf can be reused for another file without destroying its view object.
+		// Tear down the old binding before any early return so its hook server and
+		// DOM listeners cannot handle events for the new file.
+		if (boundEa && (!viewIsKnowledgeCanvas || boundFile !== file)) {
+			boundEa.onViewUnloadHook?.(view);
+		}
+		if (pending && (!viewIsKnowledgeCanvas || pending.file !== file)) {
+			pending.ea.destroy?.();
+			this.pendingEAs.delete(viewKey);
+		}
+		if (!viewIsKnowledgeCanvas || !file) return false;
+		let hookServer: ExcalidrawAutomateLike | undefined;
+		try {
+			hookServer = view.getHookServer?.();
+		} catch {
+			// A reused leaf can expose a partially torn-down view for one tick.
+			// Let bindLeafWhenReady retry after Excalidraw finishes the transition.
+			return false;
+		}
+		const hookServerMatches = view.getHookServer
+			? hookServer === boundEa
+			: this.boundHookRegistrations.get(viewKey) === true;
+		if (
+			boundFile === file
+			&& boundEa
+			&& boundEa.onLinkClickHook
+			&& boundEa.onDropHook
+			&& boundEa.onSceneChangeHook
+			&& hookServerMatches
+			&& this.isViewReady(view)
+		) {
+			return true;
+		}
+		// Do not install a hook against a half-replaced scene. Excalidraw's
+		// lifecycle may still be changing the hook server and scene at this point;
+		// the retry above will bind the same EA after the file is fully loaded.
+		if (!this.isViewReady(view)) return false;
+		if (boundEa && boundFile === file) {
+			// A fresh EA object is returned by getAPI(view) on every call. Clean up
+			// the actual instance that owns this view before replacing it; calling
+			// onViewUnloadHook on the fresh object would be a no-op.
+			boundEa.onViewUnloadHook?.(view);
+		}
 		const rootApi = this.requireApi(false);
-		const ea = rootApi?.getAPI?.(view);
+		const ea = pending?.file === file
+			? pending.ea
+			: rootApi?.getAPI?.(view);
 		if (!ea) return false;
+		if (pending?.file !== file) this.pendingEAs.set(viewKey, { file, ea });
 		ea.setView?.(view);
+		let registered = false;
+		// registerThisAsViewEA() rejects views before Excalidraw has mounted them.
+		// Avoid calling it during that window (and avoid a misleading console error)
+		// while still installing the hook directly when the view exposes the setter.
+		if (ea.registerThisAsViewEA && view._loaded !== false) {
+			try {
+				registered = ea.registerThisAsViewEA();
+			} catch (error: unknown) {
+				registered = false;
+				console.error('Unable to register Knowledge Suite Excalidraw hooks', error);
+			}
+		}
+		// `registerThisAsViewEA()` is intentionally conservative and may return
+		// false while Obsidian is still mounting the view. The view's setter is the
+		// same operation without that readiness guard; use it as a safe fallback so
+		// the managed drop/link handlers remain available during the transition.
+		let hookSetterAvailable = false;
+		let hookServerInspectable = false;
+		if (!registered && view.setHookServer) {
+			try {
+				hookSetterAvailable = true;
+				view.setHookServer(ea);
+				if (view.getHookServer) {
+					hookServerInspectable = true;
+					registered = view.getHookServer() === ea;
+				} else {
+					registered = true;
+				}
+			} catch (error: unknown) {
+				// Do not leave a half-registered EA attached to a view that is being
+				// replaced. The retry will allocate a clean instance if needed.
+				ea.destroy?.();
+				this.pendingEAs.delete(viewKey);
+				console.error('Unable to attach Knowledge Suite Excalidraw hooks', error);
+				return false;
+			}
+		}
+		const hooksInstalled = registered
+			|| hookSetterAvailable && !hookServerInspectable;
+		const isCurrentBinding = (
+			candidateView: ExcalidrawViewLike,
+			candidateEa: ExcalidrawAutomateLike,
+		): boolean => {
+			return !this.disposed
+				&& candidateView === view
+				&& candidateView.file === file
+				&& this.isViewReady(candidateView)
+				&& candidateEa === ea
+				&& this.boundViews.get(viewKey) === file
+				&& this.boundEAs.get(viewKey) === ea;
+		};
 		ea.onLinkClickHook = (element, linkText, event, hookView, hookEa) => {
+			if (!isCurrentBinding(hookView, hookEa) || !this.isViewReady(hookView)) return true;
 			const currentFile = resolveCurrentViewFile(file, hookView.file);
 			if (!this.store.getKnowledgeCanvas(currentFile.path)) return true;
 			const target = parseKnowledgeCanvasLink(linkText);
@@ -439,7 +697,7 @@ export class ExcalidrawIntegration {
 						hookView,
 						hookEa,
 						data,
-						event.ctrlKey || event.metaKey,
+						event?.ctrlKey || event?.metaKey,
 					);
 				} else {
 					void this.activateKnowledgeTarget(currentFile, hookView, hookEa, target, false);
@@ -448,18 +706,29 @@ export class ExcalidrawIntegration {
 			}
 			const data = readKnowledgeCanvasData(element);
 			if (data?.canvasType && data.path) {
-				void this.openManagedCanvasFile(currentFile, data.path, event.ctrlKey || event.metaKey);
+				void this.openManagedCanvasFile(currentFile, data.path, event?.ctrlKey || event?.metaKey);
 				return false;
 			}
 			if (!data?.path || data.nodeKind !== 'note' && data.nodeKind !== 'external-note') return true;
-			void this.openKnowledgeNote(currentFile, data.path, event.ctrlKey || event.metaKey);
+			void this.openKnowledgeNote(currentFile, data.path, event?.ctrlKey || event?.metaKey);
 			return false;
 		};
 		ea.onDropHook = (data) => {
+			if (!isCurrentBinding(data.view, data.ea) || !this.isViewReady(data.view)) return false;
+			// Do not claim a drop while Excalidraw is still replacing the scene. Its
+			// addElementsToView API rejects unloaded views; returning false here lets
+			// the native fallback handle an exceptionally early drop instead of losing
+			// the dragged item silently.
 			const dropped = this.collectDroppedItems(data);
 			if (dropped.length === 0) return false;
 			const currentFile = resolveCurrentViewFile(file, data.view.file);
-			void this.addDroppedItems(currentFile, data.ea, dropped, data.pointerPosition);
+			void this.addDroppedItems(
+				currentFile,
+				data.ea,
+				dropped,
+				data.pointerPosition,
+				(): boolean => isCurrentBinding(data.view, data.ea) && this.isViewReady(data.view),
+			);
 			// Excalidraw 2.26.x treats true as "handled" here and skips its native text-link drop.
 			return true;
 		};
@@ -472,13 +741,18 @@ export class ExcalidrawIntegration {
 				latestElements = elements;
 				if (positionSaveTimer !== null) window.clearTimeout(positionSaveTimer);
 				positionSaveTimer = window.setTimeout(() => {
-                positionSaveTimer = null;
-                if (view.file !== file || !this.boundViews.has(view)) return;
-                const currentFile = resolveCurrentViewFile(file, view.file);
+					positionSaveTimer = null;
+					if (
+						view.file !== file
+						|| !this.isViewReady(view)
+						|| this.boundViews.get(viewKey) !== file
+						|| this.boundEAs.get(viewKey) !== ea
+					) return;
+					const currentFile = resolveCurrentViewFile(file, view.file);
 					this.persistCanvasPositions(currentFile, latestElements);
 					this.syncCanvasReferencesFromElements(currentFile, latestElements);
 				}, 150);
-				this.scheduleBoldLayerSync(view, ea, latestElements);
+				this.scheduleBoldLayerSync(file, view, ea, latestElements);
 			},
 		};
 		const removeDirectClick = this.registerDirectClick(file, view, ea);
@@ -490,37 +764,97 @@ export class ExcalidrawIntegration {
 			if (positionSaveTimer !== null) window.clearTimeout(positionSaveTimer);
 			const boldTimer = this.boldSyncTimers.get(view);
 			if (boldTimer !== undefined) window.clearTimeout(boldTimer);
-			this.persistCanvasPositions(resolveCurrentViewFile(file, unloadedView.file), latestElements);
+			if (unloadedView.file === file) {
+				this.persistCanvasPositions(file, latestElements);
+			}
 			removeDirectClick();
 			removeShortcuts();
 			removeResetMenuOption();
 			removeTextControls();
-			this.boundViews.delete(view);
+			if (this.boundViews.get(viewKey) === file && this.boundEAs.get(viewKey) === ea) {
+				this.boundViews.delete(viewKey);
+				this.boundEAs.delete(viewKey);
+				this.boundHookRegistrations.delete(viewKey);
+			}
+			if (this.pendingEAs.get(viewKey)?.ea === ea) this.pendingEAs.delete(viewKey);
+			if (this.visualUpgradeRuns.get(viewKey)?.ea === ea) this.visualUpgradeRuns.delete(viewKey);
+			try {
+				if (view.getHookServer?.() === ea) view.setHookServer?.();
+			} catch {
+				// The view may already have been torn down; its hooks are no longer
+				// reachable and there is nothing left to reset.
+			}
 			ea.onLinkClickHook = undefined;
 			ea.onDropHook = undefined;
 			ea.onSceneChangeHook = null;
 		};
-		ea.registerThisAsViewEA?.();
 		// Excalidraw can report false after an Obsidian hot reload because the
 		// previous plugin instance is still registered for this view. Menu options,
 		// direct pointer handling and shortcuts do not depend on that registration,
 		// so always attach them to the current view. Otherwise Insert formula and
 		// Reset layout disappear until the entire Obsidian app is restarted.
-        this.boundViews.add(view);
-        const isCurrentBinding = (): boolean =>
-          this.boundViews.has(view) && view.file === file;
-        removeResetMenuOption = this.registerResetMenuOption(file, view, ea);
+		this.boundViews.set(viewKey, file);
+		this.boundEAs.set(viewKey, ea);
+		this.boundHookRegistrations.set(viewKey, hooksInstalled);
+		this.pendingEAs.delete(viewKey);
+		removeResetMenuOption = this.registerResetMenuOption(file, view, ea);
 		// Partial bold is now implemented by the maintained Excalidraw Core fork.
 		// Do not inject the legacy whole-element B button because it duplicates
 		// the native control and competes for the textarea selection.
 		removeTextControls = (): void => undefined;
-        void this.upgradeManagedMapVisuals(file, view, ea)
-          .then(() => isCurrentBinding() ? this.upgradeManagedCanvasIcons(view, ea) : undefined)
-          .then(() => isCurrentBinding() ? this.upgradeManagedFileNodeVisuals(view, ea) : undefined)
-          .then(() => isCurrentBinding() ? this.repairMissingManagedLucideIcons(view, ea) : undefined)
-          .then(() => isCurrentBinding() ? this.polishManagedElements(file, ea) : undefined)
-			.catch((error: unknown) => console.error('Unable to repair managed canvas icons', error));
-		return true;
+		this.scheduleManagedVisualUpgrade(file, view, ea);
+		return hooksInstalled;
+	}
+
+	/**
+	 * Waits for the requested drawing to finish replacing any scene left by the
+	 * previously open file before inspecting or rewriting managed elements.
+	 */
+	private scheduleManagedVisualUpgrade(
+		file: TFile,
+		view: ExcalidrawViewLike,
+		ea: ExcalidrawAutomateLike,
+	): void {
+		const viewKey = view as unknown as object;
+		const existing = this.visualUpgradeRuns.get(viewKey);
+		if (existing?.file === file && existing.ea === ea) return;
+		const run = { file, ea };
+		this.visualUpgradeRuns.set(viewKey, run);
+		const isSameBinding = (): boolean => {
+			return !this.disposed
+				&& this.visualUpgradeRuns.get(viewKey) === run
+				&& this.boundViews.get(viewKey) === file
+				&& this.boundEAs.get(viewKey) === ea
+				&& view.file === file;
+		};
+		const isCurrent = (): boolean => isSameBinding() && this.isViewReady(view);
+		void (async () => {
+			try {
+				for (let attempt = 0; attempt < 300; attempt += 1) {
+					if (!isSameBinding()) return;
+					if (!this.isViewReady(view)) {
+						await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+						continue;
+					}
+					await this.upgradeManagedMapVisuals(file, view, ea, isCurrent);
+					if (!isCurrent()) return;
+					await this.upgradeManagedCanvasIcons(view, ea, isCurrent);
+					if (!isCurrent()) return;
+					await this.upgradeManagedFileNodeVisuals(view, ea, isCurrent);
+					if (!isCurrent()) return;
+					await this.repairMissingManagedLucideIcons(view, ea, isCurrent);
+					if (!isCurrent()) return;
+					await this.polishManagedElements(file, ea, isCurrent);
+					return;
+				}
+			} catch (error: unknown) {
+				console.error('Unable to repair managed canvas icons', error);
+			} finally {
+				if (this.visualUpgradeRuns.get(viewKey) === run) {
+					this.visualUpgradeRuns.delete(viewKey);
+				}
+			}
+		})();
 	}
 
 	async refreshActiveKnowledgeCanvas(): Promise<void> {
@@ -535,7 +869,10 @@ export class ExcalidrawIntegration {
 		}
 		const ea = this.requireApi()?.getAPI?.(view);
 		if (!ea) return;
-		await this.renderFolderIntoView(file, state.folderPath, view, ea, false);
+		const isCurrent = this.createBindingGuard(file, view, ea);
+		if (!isCurrent()) return;
+		await this.renderFolderIntoView(file, state.folderPath, view, ea, false, false, true, isCurrent);
+		if (!isCurrent()) return;
 		new Notice('2维画布已刷新。');
 	}
 
@@ -550,12 +887,16 @@ export class ExcalidrawIntegration {
 		}
 		const ea = this.requireApi()?.getAPI?.(view);
 		if (!ea) return;
+		const isCurrent = this.createBindingGuard(file, view, ea);
+		if (!isCurrent()) return;
 		this.persistCanvasPositions(file, ea.getViewElements?.() ?? []);
+		if (!isCurrent()) return;
 		const folderPath = this.store.goBackKnowledgeCanvas(file.path);
 		if (folderPath) {
-			await this.renderFolderIntoView(file, folderPath, view, ea, false, false, false);
+			await this.renderFolderIntoView(file, folderPath, view, ea, false, false, false, isCurrent);
 			return;
 		}
+		if (!isCurrent()) return;
 		await this.openParentKnowledgeCanvas(file);
 	}
 
@@ -571,7 +912,9 @@ export class ExcalidrawIntegration {
 		}
 		const ea = this.requireApi()?.getAPI?.(view);
 		if (!ea) return;
-		await this.restoreDefaultLayout(file, view, ea);
+		const isCurrent = this.createBindingGuard(file, view, ea);
+		if (!isCurrent()) return;
+		await this.restoreDefaultLayout(file, view, ea, isCurrent);
 	}
 
 	async editFormulaInActiveKnowledgeCanvas(): Promise<void> {
@@ -599,23 +942,27 @@ export class ExcalidrawIntegration {
 		view: ExcalidrawViewLike,
 		ea: ExcalidrawAutomateLike,
 	): Promise<void> {
+		const isCurrent = this.createBindingGuard(file, view, ea);
+		if (!isCurrent()) return;
 		if (action === 'back') {
 			this.persistCanvasPositions(file, ea.getViewElements?.() ?? []);
+			if (!isCurrent()) return;
 			const previous = this.store.goBackKnowledgeCanvas(file.path);
 			if (previous) {
-				await this.renderFolderIntoView(file, previous, view, ea, false, false, false);
+				await this.renderFolderIntoView(file, previous, view, ea, false, false, false, isCurrent);
 				return;
 			}
+			if (!isCurrent()) return;
 			await this.openParentKnowledgeCanvas(file);
 			return;
 		}
 		if (action === 'reset') {
-			await this.restoreDefaultLayout(file, view, ea);
+			await this.restoreDefaultLayout(file, view, ea, isCurrent);
 			return;
 		}
 		const folderPath = action === 'root' ? ROOT_PATH : path;
 		if (!folderPath) return;
-		await this.renderFolderIntoView(file, folderPath, view, ea, true);
+		await this.renderFolderIntoView(file, folderPath, view, ea, true, false, true, isCurrent);
 	}
 
 	private registerDirectClick(
@@ -625,37 +972,76 @@ export class ExcalidrawIntegration {
 	): () => void {
 		const container = view.containerEl;
 		if (!container || !ea.getViewSelectedElement) return () => undefined;
-		let start: { x: number; y: number; time: number; elementId: string } | null = null;
+		const viewKey = view as unknown as object;
+		const isCurrentInteraction = (): boolean => {
+			return !this.disposed
+				&& view.file === file
+				&& this.isViewReady(view)
+				&& this.boundViews.get(viewKey) === file
+				&& this.boundEAs.get(viewKey) === ea;
+		};
+		const resolveInteractionElement = (event: MouseEvent): ExcalidrawElementLike | null => {
+			const hitElement = this.getContextMenuHitElement(view, event);
+			// Pointer activation must be hit-test-only. Falling back to the current
+			// selection when the transform is temporarily unavailable can open an
+			// unrelated note on a blank click (especially while a leaf is switching).
+			return hitElement === undefined ? null : resolveContextMenuElement(hitElement, null);
+		};
+		let start: { x: number; y: number; time: number; targetKey: string } | null = null;
 		const isCanvasSurfaceEvent = (event: MouseEvent): boolean => {
 			const ElementConstructor = container.ownerDocument.defaultView?.Element;
-			if (!ElementConstructor || !(event.target instanceof ElementConstructor)) return false;
-			return event.target.matches('canvas.excalidraw__canvas');
+			const target = ElementConstructor && event.target instanceof ElementConstructor
+				? event.target
+				: null;
+			const canvas = target?.closest('canvas.excalidraw__canvas');
+			if (canvas && container.contains(canvas)) return true;
+			// Excalidraw renders its toolbar above the canvas in a sibling layer.
+			// Coordinate fallback is useful for popouts and transparent overlays, but
+			// must not turn a toolbar/menu click into a canvas activation.
+			if (target?.closest(
+				'.Island, .dropdown-menu, .context-menu, .popover, button, input, textarea, select, [role="button"]',
+			)) return false;
+			const rect = container.querySelector('canvas.excalidraw__canvas')?.getBoundingClientRect();
+			return Boolean(
+				rect
+				&& rect.width > 0
+				&& rect.height > 0
+				&& event.clientX >= rect.left
+				&& event.clientX <= rect.right
+				&& event.clientY >= rect.top
+				&& event.clientY <= rect.bottom,
+			);
 		};
 		const onPointerDown = (event: PointerEvent): void => {
 			start = null;
-			if (event.button !== 0 || !isCanvasSurfaceEvent(event)) return;
-			const element = this.getContextMenuHitElement(view, event);
+			if (!isCurrentInteraction() || event.button !== 0 || !isCanvasSurfaceEvent(event)) return;
+			const element = resolveInteractionElement(event);
 			if (!element) return;
 			start = {
 				x: event.clientX,
 				y: event.clientY,
 				time: Date.now(),
-				elementId: element.id,
+				targetKey: getInteractionTargetKey(element) ?? element.id,
 			};
 		};
 		const onPointerUp = (event: PointerEvent): void => {
-			if (!start || event.button !== 0 || !isCanvasSurfaceEvent(event)) return;
+			if (!start || !isCurrentInteraction() || event.button !== 0) return;
+			if (!isCanvasSurfaceEvent(event)) {
+				start = null;
+				return;
+			}
 			const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
 			const elapsed = Date.now() - start.time;
-			const startedElementId = start.elementId;
+			const startedTargetKey = start.targetKey;
 			start = null;
 			if (distance > 5 || elapsed > 600) return;
-			const element = this.getContextMenuHitElement(view, event);
-			if (!element || element.id !== startedElementId) return;
+			const element = resolveInteractionElement(event);
+			if (!element || getInteractionTargetKey(element) !== startedTargetKey) return;
 			const data = readKnowledgeCanvasData(element);
 			if (getKnowledgeCanvasActivationGesture(data) !== 'single') return;
 			const openInNewLeaf = event.ctrlKey || event.metaKey;
 			window.setTimeout(() => {
+				if (!isCurrentInteraction()) return;
 				const currentFile = resolveCurrentViewFile(file, view.file);
 				if (!this.store.getKnowledgeCanvas(currentFile.path)) return;
 				if (data.canvasType && data.path) {
@@ -679,8 +1065,8 @@ export class ExcalidrawIntegration {
 			}, 0);
 		};
 		const onDoubleClick = (event: MouseEvent): void => {
-			if (event.button !== 0 || !isCanvasSurfaceEvent(event)) return;
-			const element = this.getContextMenuHitElement(view, event);
+			if (!isCurrentInteraction() || event.button !== 0 || !isCanvasSurfaceEvent(event)) return;
+			const element = resolveInteractionElement(event);
 			if (!element) return;
 			if (readFormulaLatex(element) !== null) {
 				event.preventDefault();
@@ -697,6 +1083,7 @@ export class ExcalidrawIntegration {
 			void this.openKnowledgeNote(currentFile, data.path, event.ctrlKey || event.metaKey);
 		};
 		const onContextMenu = (event: MouseEvent): void => {
+			if (!isCurrentInteraction() || !isCanvasSurfaceEvent(event)) return;
 			const hitElement = this.getContextMenuHitElement(view, event);
 			const element = resolveContextMenuElement(
 				hitElement,
@@ -846,7 +1233,12 @@ export class ExcalidrawIntegration {
 		const onKeyDown = (event: KeyboardEvent): void => {
 			// This is a read-only activity check. getLeaf(false) may create an
 			// empty tab when the active leaf is a custom ItemView in Obsidian 1.13.
-			if (this.app.workspace.getMostRecentLeaf()?.view !== view) return;
+			if (
+				this.app.workspace.getMostRecentLeaf()?.view !== view
+				|| view.file !== file
+				|| this.boundEAs.get(view) !== ea
+				|| !this.isViewReady(view)
+			) return;
 			if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
 			if (event.target instanceof Element && event.target.closest('.knowledge-map-formula-dialog')) return;
 			const key = event.key.toLowerCase();
@@ -1012,9 +1404,11 @@ export class ExcalidrawIntegration {
 		existing: ExcalidrawElementLike | null,
 	): Promise<void> {
 		if (!ea.addImage || !ea.addElementsToView) return;
+		const isCurrent = this.createBindingGuard(view.file, view, ea);
+		if (!isCurrent()) return;
 		const normalized = latex.trim();
 		if (!normalized) {
-			if (existing) {
+			if (existing && isCurrent()) {
 				ea.deleteViewElements?.([existing]);
 				new Notice('公式已移除。');
 			}
@@ -1028,7 +1422,7 @@ export class ExcalidrawIntegration {
 				normalized,
 				view.containerEl?.ownerDocument ?? document,
 			);
-			if (!dataUrl) {
+			if (!dataUrl || !isCurrent()) {
 				new Notice('无法渲染 LaTeX 公式。');
 				return;
 			}
@@ -1039,7 +1433,7 @@ export class ExcalidrawIntegration {
 				scale: false,
 				anchor: false,
 			});
-			if (!id) {
+			if (!id || !isCurrent()) {
 				new Notice('无法渲染 LaTeX 公式。');
 				return;
 			}
@@ -1066,8 +1460,10 @@ export class ExcalidrawIntegration {
 				latex: normalized,
 				...elementData('manual', 'formula', { latex: normalized }),
 			});
+			if (!isCurrent()) return;
 			if (existing) ea.deleteViewElements?.([existing]);
-			const added = await ea.addElementsToView(false, true, true);
+			const added = await ea.addElementsToView(false, true, true, false, undefined, isCurrent);
+			if (!isCurrent()) return;
 			if (added === false) {
 				new Notice('无法将公式添加到 Excalidraw。');
 				return;
@@ -1120,6 +1516,8 @@ export class ExcalidrawIntegration {
 		ea: ExcalidrawAutomateLike,
 		target?: ExcalidrawElementLike | null,
 	): Promise<void> {
+		const isCurrent = this.createBindingGuard(view.file, view, ea);
+		if (!isCurrent()) return;
 		const primary = this.resolvePrimaryTextElement(
 			ea,
 			target ?? ea.getViewSelectedElement?.() ?? null,
@@ -1138,6 +1536,7 @@ export class ExcalidrawIntegration {
 		try {
 			if (styleData?.bold) {
 				const shadow = ea.getViewElements?.().find((candidate) => candidate.id === styleData.shadowId);
+				if (!isCurrent()) return;
 				if (shadow) ea.deleteViewElements?.([shadow]);
 				ea.reset();
 				ea.copyViewElementsToEAforEditing([primary], false);
@@ -1147,7 +1546,8 @@ export class ExcalidrawIntegration {
 					...(editable.customData ?? {}),
 					[TEXT_STYLE_DATA_KEY]: { bold: false },
 				};
-				await ea.addElementsToView(false, true, false);
+				await ea.addElementsToView(false, true, false, false, undefined, isCurrent);
+				if (!isCurrent()) return;
 				ea.selectElementsInView?.([primary.id]);
 				new Notice('已取消粗体。');
 				return;
@@ -1159,7 +1559,7 @@ export class ExcalidrawIntegration {
 			ea.reset();
 			ea.copyViewElementsToEAforEditing([primary], false);
 			const editablePrimary = ea.getElement(primary.id);
-			if (!editablePrimary) return;
+			if (!editablePrimary || !isCurrent()) return;
 			const shadowId = ea.addText(
 				primary.x + BOLD_OFFSET_X,
 				primary.y + BOLD_OFFSET_Y,
@@ -1181,7 +1581,8 @@ export class ExcalidrawIntegration {
 				...(editablePrimary.customData ?? {}),
 				[TEXT_STYLE_DATA_KEY]: { bold: true, shadowId },
 			};
-			await ea.addElementsToView(false, true, false);
+			await ea.addElementsToView(false, true, false, false, undefined, isCurrent);
+			if (!isCurrent()) return;
 			ea.selectElementsInView?.([primary.id]);
 			new Notice('已应用粗体。');
 		} finally {
@@ -1210,15 +1611,24 @@ export class ExcalidrawIntegration {
 	}
 
 	private scheduleBoldLayerSync(
+		file: TFile,
 		view: ExcalidrawViewLike,
 		ea: ExcalidrawAutomateLike,
 		elements: readonly ExcalidrawElementLike[],
 	): void {
+		const viewKey = view as unknown as object;
+		const isCurrent: BindingGuard = (): boolean => Boolean(
+			!this.disposed
+			&& view.file === file
+			&& this.boundViews.get(viewKey) === file
+			&& this.boundEAs.get(viewKey) === ea
+			&& this.isViewReady(view),
+		);
 		const current = this.boldSyncTimers.get(view);
 		if (current !== undefined) window.clearTimeout(current);
 		const timer = window.setTimeout(() => {
 			this.boldSyncTimers.delete(view);
-			void this.syncBoldLayers(view, ea, elements);
+			void this.syncBoldLayers(view, ea, elements, isCurrent);
 		}, 120);
 		this.boldSyncTimers.set(view, timer);
 	}
@@ -1227,7 +1637,9 @@ export class ExcalidrawIntegration {
 		view: ExcalidrawViewLike,
 		ea: ExcalidrawAutomateLike,
 		elements: readonly ExcalidrawElementLike[],
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		if (this.stylingViews.has(view) || !ea.copyViewElementsToEAforEditing || !ea.addElementsToView) return;
 		const container = view.containerEl;
 		const editingText = container
@@ -1258,11 +1670,13 @@ export class ExcalidrawIntegration {
 				changes.push(element, shadow);
 			}
 		}
+		if (isCurrent && !isCurrent()) return;
 		if (orphans.length > 0) ea.deleteViewElements?.(orphans);
 		if (changes.length === 0) return;
 		const uniqueChanges = [...new Map(changes.map((element) => [element.id, element])).values()];
 		this.stylingViews.add(view);
 		try {
+			if (isCurrent && !isCurrent()) return;
 			ea.reset();
 			ea.copyViewElementsToEAforEditing(uniqueChanges, false);
 			for (const primary of uniqueChanges) {
@@ -1271,7 +1685,7 @@ export class ExcalidrawIntegration {
 				const editableShadow = ea.getElement(data.shadowId);
 				if (editableShadow) this.copyBoldVisualProperties(primary, editableShadow);
 			}
-			await ea.addElementsToView(false, true, false);
+			await ea.addElementsToView(false, true, false, false, undefined, isCurrent);
 		} finally {
 			this.stylingViews.delete(view);
 		}
@@ -1297,10 +1711,13 @@ export class ExcalidrawIntegration {
 		file: TFile,
 		view: ExcalidrawViewLike,
 		ea: ExcalidrawAutomateLike,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		const state = this.store.getKnowledgeCanvas(file.path);
 		if (!state) return;
-		await this.renderFolderIntoView(file, state.folderPath, view, ea, false, true, false);
+		await this.renderFolderIntoView(file, state.folderPath, view, ea, false, true, false, isCurrent);
+		if (isCurrent && !isCurrent()) return;
 		new Notice('当前文件夹布局已恢复为默认位置。');
 	}
 
@@ -1327,7 +1744,14 @@ export class ExcalidrawIntegration {
 	): ExcalidrawElementLike | null | undefined {
 		const api = view.excalidrawAPI;
 		if (!api?.getElementAtPosition) return undefined;
-		const state = api.getAppState();
+		let state: ReturnType<NonNullable<ExcalidrawViewLike['excalidrawAPI']>['getAppState']>;
+		try {
+			state = api.getAppState();
+		} catch {
+			// Treat a torn-down API as a definite miss. Falling back to the selected
+			// element here could run a menu action against the wrong drawing.
+			return null;
+		}
 		const zoom = state.zoom?.value;
 		if (
 			!zoom
@@ -1336,12 +1760,26 @@ export class ExcalidrawIntegration {
 			|| state.scrollX === undefined
 			|| state.scrollY === undefined
 		) return undefined;
-		const x = (event.clientX - state.offsetLeft) / zoom - state.scrollX;
-		const y = (event.clientY - state.offsetTop) / zoom - state.scrollY;
-		return api.getElementAtPosition(x, y, {
+		const options = {
 			preferSelected: false,
 			includeLockedElements: true,
-		});
+		};
+		let point: { x: number; y: number };
+		try {
+			// Use Excalidraw's canonical transform so zoom, scroll and popout
+			// offsets stay identical to the editor's own hit testing.
+			point = viewportCoordsToSceneCoords(
+				{ clientX: event.clientX, clientY: event.clientY },
+				state as Parameters<typeof viewportCoordsToSceneCoords>[1],
+			);
+		} catch {
+			return null;
+		}
+		try {
+			return api.getElementAtPosition(point.x, point.y, options) ?? null;
+		} catch {
+			return null;
+		}
 	}
 
 	private async activateFolderElement(
@@ -1498,7 +1936,25 @@ export class ExcalidrawIntegration {
 		if (this.navigationLocks.has(key)) return;
 		this.navigationLocks.add(key);
 		try {
-			await this.app.workspace.openLinkText(notePath, sourceFile.path, newLeaf);
+			// The managed node already carries a vault path. Resolve that concrete
+			// TFile first so navigation does not depend on linkpath resolution or
+			// the currently active view's source path.
+			const target =
+				this.app.vault.getAbstractFileByPath(notePath)
+				?? this.app.metadataCache.getFirstLinkpathDest(notePath, sourceFile.path);
+			if (target instanceof TFile) {
+				try {
+					const leaf = this.app.workspace.getLeaf(newLeaf ? 'tab' : false);
+					await leaf.openFile(target, { active: true });
+				} catch (error: unknown) {
+					// Keep the normal Obsidian resolver as a fallback for unusual leaf
+					// implementations (for example a transient popout leaf).
+					console.error('Unable to open managed Markdown node', error);
+					await this.app.workspace.openLinkText(notePath, sourceFile.path, newLeaf);
+				}
+			} else {
+				await this.app.workspace.openLinkText(notePath, sourceFile.path, newLeaf);
+			}
 		} finally {
 			window.setTimeout(() => this.navigationLocks.delete(key), 200);
 		}
@@ -1512,7 +1968,9 @@ export class ExcalidrawIntegration {
 		addToHistory: boolean,
 		resetLayout = false,
 		captureCurrent = true,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		if (captureCurrent) this.persistCanvasPositions(file, ea.getViewElements?.() ?? []);
 		const normalizedPath = normalizeFolderPath(folderPath);
 		const abstractFile = this.resolvePath(normalizedPath);
@@ -1520,15 +1978,16 @@ export class ExcalidrawIntegration {
 			new Notice(`找不到文件夹：${normalizedPath}`);
 			return;
 		}
+		if (isCurrent && !isCurrent()) return;
 		this.renderingViews.add(view);
 		try {
+			if (isCurrent && !isCurrent()) return;
 			if (resetLayout) this.store.resetKnowledgeCanvasLayout(file.path, normalizedPath);
 			ea.setView?.(view);
 			const generated = ea.getViewElements?.().filter((element) => {
 				return readKnowledgeCanvasData(element)?.scope === 'map';
 			}) ?? [];
 			const appearances = this.collectManagedNodeAppearances(generated);
-			if (generated.length > 0) ea.deleteViewElements?.(generated);
 
 			const graph = this.graphBuilder.build(normalizedPath, this.store.settings.showExternalLinks);
 			const sharedPositions = resetLayout ? {} : this.store.getMapState(normalizedPath)?.nodes ?? {};
@@ -1536,6 +1995,7 @@ export class ExcalidrawIntegration {
 				? {}
 				: this.store.getKnowledgeCanvasPositions(file.path, normalizedPath);
 			const positions = createInitialPositions(graph, { ...sharedPositions, ...canvasPositions });
+			if (isCurrent && !isCurrent()) return;
 			ea.reset();
 			const state = this.store.getKnowledgeCanvas(file.path);
 			await this.addFolderMapToWorkbench(
@@ -1544,8 +2004,22 @@ export class ExcalidrawIntegration {
 				positions,
 				state ? canNavigateBackFromKnowledgeCanvas(state) : false,
 				appearances,
+				isCurrent,
 			);
-			const added = await ea.addElementsToView?.(false, true, true);
+			if (isCurrent && !isCurrent()) return;
+			// Build the replacement in EA's in-memory buffer first. Deleting the old
+			// map before an awaited icon/text operation could leave a half-rendered
+			// scene if the leaf is switched during that await.
+			if (generated.length > 0) ea.deleteViewElements?.(generated);
+			const added = await ea.addElementsToView?.(
+				false,
+				true,
+				true,
+				false,
+				undefined,
+				isCurrent,
+			);
+			if (isCurrent && !isCurrent()) return;
 			if (added === false) {
 				new Notice('无法更新 Excalidraw 中的2维画布元素。');
 				return;
@@ -1594,12 +2068,15 @@ export class ExcalidrawIntegration {
 		positions: Record<string, SavedNodePosition>,
 		canGoBack: boolean,
 		appearances: ReadonlyMap<string, KnowledgeCanvasNodeAppearance> = new Map(),
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		this.addHeader(ea, graph.folderPath);
 		this.addNavigation(ea, canGoBack);
 		const elementIds = new Map<string, string>();
 
 		for (const node of graph.nodes) {
+			if (isCurrent && !isCurrent()) return;
 			const point = positions[node.id];
 			if (!point) continue;
 			const nodeIds = await this.addNode(
@@ -1610,10 +2087,12 @@ export class ExcalidrawIntegration {
 				'map',
 				appearances.get(node.id),
 			);
+			if (isCurrent && !isCurrent()) return;
 			elementIds.set(node.id, nodeIds.shapeId);
 		}
 
 		for (const edge of graph.edges) {
+			if (isCurrent && !isCurrent()) return;
 			const from = positions[edge.from];
 			const to = positions[edge.to];
 			const fromId = elementIds.get(edge.from);
@@ -2017,18 +2496,22 @@ export class ExcalidrawIntegration {
 		ea: ExcalidrawAutomateLike,
 		items: TAbstractFile[],
 		pointer: { x: number; y: number },
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		const existingCanvasTargets = new Set(
 			(ea.getViewElements?.() ?? []).flatMap((element): string[] => {
 				const data = readKnowledgeCanvasData(element);
 				return data?.canvasType && data.path ? [data.path] : [];
 			}),
 		);
+		if (isCurrent && !isCurrent()) return;
 		ea.reset();
 		const canvasPaths: string[] = [];
 		let createdElementGroups = 0;
 		let attemptedSelfDrop = false;
 		for (const [index, item] of items.entries()) {
+			if (isCurrent && !isCurrent()) return;
 			const canvasState = item instanceof TFile ? this.store.getKnowledgeCanvas(item.path) : undefined;
 			const column = index % 4;
 			const row = Math.floor(index / 4);
@@ -2041,6 +2524,7 @@ export class ExcalidrawIntegration {
 				}
 				if (!existingCanvasTargets.has(item.path)) {
 					await this.addManagedCanvasNode(ea, item, canvasState.canvasType, centerX, centerY);
+					if (isCurrent && !isCurrent()) return;
 					createdElementGroups += 1;
 				}
 				canvasPaths.push(item.path);
@@ -2055,14 +2539,18 @@ export class ExcalidrawIntegration {
 				label,
 			};
 			await this.addNode(ea, node, centerX, centerY, 'manual');
+			if (isCurrent && !isCurrent()) return;
 			createdElementGroups += 1;
 		}
+		if (isCurrent && !isCurrent()) return;
 		const added = createdElementGroups > 0
-			? await ea.addElementsToView?.(false, true, true)
+			? await ea.addElementsToView?.(false, true, true, false, undefined, isCurrent)
 			: true;
+		if (isCurrent && !isCurrent()) return;
 		if (added === false) new Notice('无法将拖入的仓库项目添加到 Excalidraw。');
 		else {
 			for (const childPath of canvasPaths) {
+				if (isCurrent && !isCurrent()) return;
 				if (!this.store.addCanvasReference(parentFile.path, childPath)) {
 					new Notice('无法建立画布引用关系。');
 				}
@@ -2561,8 +3049,10 @@ export class ExcalidrawIntegration {
 		data: KnowledgeCanvasElementData,
 		icon: KnowledgeCanvasNodeIcon,
 	): Promise<void> {
+		const isCurrent = this.createBindingGuard(view.file, view, ea);
+		if (!isCurrent()) return;
 		if (data.canvasType) {
-			await this.replaceManagedCanvasNodeIcon(view, ea, data, icon);
+			await this.replaceManagedCanvasNodeIcon(view, ea, data, icon, isCurrent);
 			return;
 		}
 		const appearance = mergeKnowledgeCanvasNodeAppearance(
@@ -2576,6 +3066,8 @@ export class ExcalidrawIntegration {
 			appearance,
 			'无法保存节点图标。',
 			'节点图标已更新。',
+			true,
+			isCurrent,
 		);
 	}
 
@@ -2584,7 +3076,9 @@ export class ExcalidrawIntegration {
 		ea: ExcalidrawAutomateLike,
 		data: KnowledgeCanvasElementData,
 		icon: KnowledgeCanvasNodeIcon,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		const appearance = mergeKnowledgeCanvasNodeAppearance(
 			this.getManagedNodeAppearance(ea, data),
 			{ icon },
@@ -2596,6 +3090,8 @@ export class ExcalidrawIntegration {
 			appearance,
 			'无法保存节点图标。',
 			'节点图标已更新。',
+			true,
+			isCurrent,
 		);
 	}
 
@@ -2607,7 +3103,9 @@ export class ExcalidrawIntegration {
 		failureMessage: string,
 		successMessage: string,
 		notify = true,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		if (!data.path || !data.canvasType || !ea.addElementsToView) return;
 		const file = this.app.vault.getAbstractFileByPath(data.path);
 		if (!(file instanceof TFile)) {
@@ -2633,7 +3131,7 @@ export class ExcalidrawIntegration {
 		}
 		this.stylingViews.add(view);
 		try {
-			ea.deleteViewElements?.(elements);
+			if (isCurrent && !isCurrent()) return;
 			ea.setView?.(view);
 			ea.reset();
 			await this.addManagedCanvasNode(
@@ -2644,7 +3142,12 @@ export class ExcalidrawIntegration {
 				body.y + body.height / 2,
 				appearance,
 			);
-			const added = await ea.addElementsToView(false, true, true);
+			if (isCurrent && !isCurrent()) return;
+			// Finish all asynchronous icon work before removing the old group.
+			// The delete and guarded commit then happen in one synchronous turn.
+			ea.deleteViewElements?.(elements);
+			const added = await ea.addElementsToView(false, true, true, false, undefined, isCurrent);
+			if (isCurrent && !isCurrent()) return;
 			if (notify) new Notice(added === false ? failureMessage : successMessage);
 		} finally {
 			this.stylingViews.delete(view);
@@ -2659,7 +3162,9 @@ export class ExcalidrawIntegration {
 		failureMessage: string,
 		successMessage: string,
 		notify = true,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		if (!data.path || !data.nodeKind || !ea.addElementsToView) return;
 		const target = this.app.vault.getAbstractFileByPath(data.path);
 		if (!(target instanceof TFile) && !(target instanceof TFolder)) {
@@ -2688,7 +3193,7 @@ export class ExcalidrawIntegration {
 		};
 		this.stylingViews.add(view);
 		try {
-			ea.deleteViewElements?.(elements);
+			if (isCurrent && !isCurrent()) return;
 			ea.setView?.(view);
 			ea.reset();
 			await this.addNode(
@@ -2699,7 +3204,10 @@ export class ExcalidrawIntegration {
 				data.scope,
 				appearance,
 			);
-			const added = await ea.addElementsToView(false, true, true);
+			if (isCurrent && !isCurrent()) return;
+			ea.deleteViewElements?.(elements);
+			const added = await ea.addElementsToView(false, true, true, false, undefined, isCurrent);
+			if (isCurrent && !isCurrent()) return;
 			if (notify) new Notice(added === false ? failureMessage : successMessage);
 		} finally {
 			this.stylingViews.delete(view);
@@ -2709,7 +3217,9 @@ export class ExcalidrawIntegration {
 	private async upgradeManagedCanvasIcons(
 		view: ExcalidrawViewLike,
 		ea: ExcalidrawAutomateLike,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		if (!ea.getViewElements || !ea.addElementsToView) return;
 		const elements = ea.getViewElements();
 		const legacyTargets = new Map<string, KnowledgeCanvasElementData>();
@@ -2759,10 +3269,11 @@ export class ExcalidrawIntegration {
 		if (replacements.length === 0) return;
 		this.stylingViews.add(view);
 		try {
-			ea.deleteViewElements?.(replacements.flatMap((replacement) => replacement.elements));
+			if (isCurrent && !isCurrent()) return;
 			ea.setView?.(view);
 			ea.reset();
 			for (const replacement of replacements) {
+				if (isCurrent && !isCurrent()) return;
 				await this.addManagedCanvasNode(
 					ea,
 					replacement.file,
@@ -2772,7 +3283,10 @@ export class ExcalidrawIntegration {
 					replacement.appearance,
 				);
 			}
-			await ea.addElementsToView(false, true, true);
+			if (isCurrent && !isCurrent()) return;
+			ea.deleteViewElements?.(replacements.flatMap((replacement) => replacement.elements));
+			await ea.addElementsToView(false, true, true, false, undefined, isCurrent);
+			if (isCurrent && !isCurrent()) return;
 		} finally {
 			this.stylingViews.delete(view);
 		}
@@ -2782,7 +3296,9 @@ export class ExcalidrawIntegration {
 		file: TFile,
 		view: ExcalidrawViewLike,
 		ea: ExcalidrawAutomateLike,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		const state = this.store.getKnowledgeCanvas(file.path);
 		if (!state || !ea.getViewElements) return;
 		const needsUpgrade = ea.getViewElements().some((element) => {
@@ -2795,13 +3311,15 @@ export class ExcalidrawIntegration {
 				&& !element.isDeleted;
 		});
 		if (!needsUpgrade) return;
-		await this.renderFolderIntoView(file, state.folderPath, view, ea, false, false, true);
+		await this.renderFolderIntoView(file, state.folderPath, view, ea, false, false, true, isCurrent);
 	}
 
 	private async upgradeManagedFileNodeVisuals(
 		view: ExcalidrawViewLike,
 		ea: ExcalidrawAutomateLike,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		if (!ea.getViewElements || !ea.addElementsToView) return;
 		const legacyTargets = new Map<string, KnowledgeCanvasElementData>();
 		for (const element of ea.getViewElements()) {
@@ -2817,6 +3335,7 @@ export class ExcalidrawIntegration {
 			legacyTargets.set(`${data.nodeKind}:${data.path}`, data);
 		}
 		for (const data of legacyTargets.values()) {
+			if (isCurrent && !isCurrent()) return;
 			await this.replaceManagedFileNode(
 				view,
 				ea,
@@ -2825,6 +3344,7 @@ export class ExcalidrawIntegration {
 				'无法升级节点外观。',
 				'节点外观已升级。',
 				false,
+				isCurrent,
 			);
 		}
 	}
@@ -2832,7 +3352,9 @@ export class ExcalidrawIntegration {
 	private async repairMissingManagedLucideIcons(
 		view: ExcalidrawViewLike,
 		ea: ExcalidrawAutomateLike,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		const api = view.excalidrawAPI;
 		const persistentFiles = view.excalidrawData;
 		if (!persistentFiles?.hasFile && !api?.getFiles || !ea.getViewElements) return;
@@ -2856,6 +3378,7 @@ export class ExcalidrawIntegration {
 			if (type) targets.set(`${type}:${data.path}`, data);
 		}
 		for (const data of targets.values()) {
+			if (isCurrent && !isCurrent()) return;
 			const appearance = mergeKnowledgeCanvasNodeAppearance(data.appearance);
 			if (data.canvasType) {
 				await this.replaceManagedCanvasNode(
@@ -2866,6 +3389,7 @@ export class ExcalidrawIntegration {
 					'无法恢复节点图标。',
 					'节点图标已恢复。',
 					false,
+					isCurrent,
 				);
 			} else if (data.nodeKind) {
 				await this.replaceManagedFileNode(
@@ -2876,6 +3400,7 @@ export class ExcalidrawIntegration {
 					'无法恢复节点图标。',
 					'节点图标已恢复。',
 					false,
+					isCurrent,
 				);
 			}
 		}
@@ -3070,6 +3595,17 @@ export class ExcalidrawIntegration {
 		patch: Partial<KnowledgeCanvasNodeAppearance>,
 	): Promise<void> {
 		if (!ea.copyViewElementsToEAforEditing || !ea.addElementsToView) return;
+		const boundFile = view.file;
+		const viewKey = view as unknown as object;
+		const isCurrent: BindingGuard = (): boolean => Boolean(
+			!this.disposed
+			&& boundFile
+			&& view.file === boundFile
+			&& this.boundViews.get(viewKey) === boundFile
+			&& this.boundEAs.get(viewKey) === ea
+			&& this.isViewReady(view),
+		);
+		if (!isCurrent()) return;
 		const elements = this.findManagedNodeElements(ea, target);
 		if (elements.length === 0) {
 			new Notice('找不到要修改的节点。');
@@ -3087,6 +3623,8 @@ export class ExcalidrawIntegration {
 				appearance,
 				'无法保存节点颜色。',
 				'节点颜色已更新。',
+				true,
+				isCurrent,
 			);
 			return;
 		}
@@ -3098,6 +3636,8 @@ export class ExcalidrawIntegration {
 				appearance,
 				'无法保存节点颜色。',
 				'节点颜色已更新。',
+				true,
+				isCurrent,
 			);
 			return;
 		}
@@ -3108,6 +3648,7 @@ export class ExcalidrawIntegration {
 		const colors = this.managedNodeColors(target, appearance);
 		this.stylingViews.add(view);
 		try {
+			if (!isCurrent()) return;
 			ea.reset();
 			ea.copyViewElementsToEAforEditing(elements, false);
 			for (const element of elements) {
@@ -3143,7 +3684,7 @@ export class ExcalidrawIntegration {
 					});
 				}
 			}
-			const added = await ea.addElementsToView(false, true, false);
+			const added = await ea.addElementsToView(false, true, false, false, undefined, isCurrent);
 			if (added === false) {
 				new Notice('无法保存节点外观。');
 				return;
@@ -3227,7 +3768,9 @@ export class ExcalidrawIntegration {
 	private async polishManagedElements(
 		file: TFile,
 		ea: ExcalidrawAutomateLike,
+		isCurrent?: BindingGuard,
 	): Promise<void> {
+		if (isCurrent && !isCurrent()) return;
 		if (!ea.getViewElements || !ea.copyViewElementsToEAforEditing || !ea.addElementsToView) return;
 		const allElements = ea.getViewElements();
 		const state = this.store.getKnowledgeCanvas(file.path);
@@ -3240,15 +3783,13 @@ export class ExcalidrawIntegration {
 				|| data.action === 'back' && !canGoBack
 			);
 		});
-		if (obsoleteNavigationElements.length > 0) {
-			ea.deleteViewElements?.(obsoleteNavigationElements);
-		}
 		const obsoleteIds = new Set(obsoleteNavigationElements.map((element) => element.id));
 		const managedElements = allElements.filter((element) => {
 			const data = readKnowledgeCanvasData(element);
 			return Boolean(data) && !obsoleteIds.has(element.id);
 		});
 		if (managedElements.length === 0) return;
+		if (isCurrent && !isCurrent()) return;
 		ea.reset();
 		ea.copyViewElementsToEAforEditing(managedElements, false);
 		for (const element of managedElements) {
@@ -3292,7 +3833,13 @@ export class ExcalidrawIntegration {
 				});
 			}
 		}
-		await ea.addElementsToView(false, true, false);
+		if (isCurrent && !isCurrent()) return;
+		// Apply obsolete-navigation removal only after the replacement buffer has
+		// been prepared. The guarded commit prevents a file switch during save from
+		// writing this buffer into the next drawing.
+		if (obsoleteNavigationElements.length > 0) ea.deleteViewElements?.(obsoleteNavigationElements);
+		await ea.addElementsToView(false, true, false, false, undefined, isCurrent);
+		if (isCurrent && !isCurrent()) return;
 	}
 
 	private nodeStrokeColor(kind: MapNode['kind']): string {
@@ -3368,7 +3915,10 @@ export class ExcalidrawIntegration {
 				const view = candidate.view as unknown as ExcalidrawViewLike;
 				return view.file?.path === filePath;
 			});
-			if (leaf && this.bindLeaf(leaf)) return;
+			if (leaf) {
+				void this.bindLeafWhenReady(leaf);
+				return;
+			}
 			await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
 		}
 	}

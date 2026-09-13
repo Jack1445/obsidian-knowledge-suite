@@ -344,6 +344,7 @@ export default class KnowledgeMapController {
 
 	destroy(): void {
 		if (this.initialized) {
+			this.excalidraw?.destroy();
 			void this.store.flush();
 		}
 	}
@@ -356,13 +357,19 @@ export default class KnowledgeMapController {
 
 	private registerVaultEvents(): void {
 		this.host.registerEvent(this.app.workspace.on('active-leaf-change', (leaf) => {
-			window.setTimeout(() => this.excalidraw.bindLeaf(leaf), 100);
+			window.setTimeout((): void => void this.excalidraw.bindLeafWhenReady(leaf), 100);
 			for (const treeLeaf of this.app.workspace.getLeavesOfType(KNOWLEDGE_CANVAS_TREE_VIEW_TYPE)) {
 				if (treeLeaf.view instanceof CanvasTreeView) treeLeaf.view.refresh();
 			}
 		}));
 		this.host.registerEvent(this.app.workspace.on('file-open', () => {
 			window.setTimeout(() => this.excalidraw.bindOpenViews(), 100);
+		}));
+		this.host.registerEvent(this.app.workspace.on('layout-change', () => {
+			// A large canvas can finish mounting after the file-open event. The
+			// integration's idempotent retry then installs its hooks as soon as the
+			// Excalidraw view is ready.
+			this.excalidraw.bindOpenViews();
 		}));
 		this.host.registerEvent(this.app.vault.on('create', () => this.refreshViews()));
 		this.host.registerEvent(this.app.vault.on('modify', () => this.refreshViews()));

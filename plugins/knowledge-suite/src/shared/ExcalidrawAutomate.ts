@@ -3782,6 +3782,8 @@ export class ExcalidrawAutomate {
    * @param {boolean} [save=true] - Whether to save the changes.
    * @param {boolean} [newElementsOnTop=false] - Whether to add new elements on top of existing elements.
    * @param {boolean} [shouldRestoreElements=false] - Whether to restore legacy elements in the scene.
+   * @param {CaptureUpdateActionType} [captureUpdate=CaptureUpdateAction.IMMEDIATELY] - How the scene update is captured for undo/redo.
+   * @param {() => boolean} [isCurrent] - Optional identity guard. Returning false cancels stale work before it can update or save a reused view.
    * @returns {Promise<boolean>} Promise resolving to true if elements were added, false otherwise.
    */
   async addElementsToView(
@@ -3790,16 +3792,29 @@ export class ExcalidrawAutomate {
     newElementsOnTop: boolean = false,
     shouldRestoreElements: boolean = false,
     captureUpdate: CaptureUpdateActionType = CaptureUpdateAction.IMMEDIATELY,
+    isCurrent?: () => boolean,
   ): Promise<boolean> {
-    if (!this.targetView || !this.targetView?._loaded) {
+    const targetView = this.targetView;
+    const hasAddGuard = typeof isCurrent === "function";
+    const isAddCurrent = (): boolean => {
+      if (!hasAddGuard) {
+        return true;
+      }
+      try {
+        return this.targetView === targetView && isCurrent() !== false;
+      } catch {
+        return false;
+      }
+    };
+    if (!targetView || !targetView._loaded || !isAddCurrent()) {
       errorMessage("targetView not set", "addElementsToView()");
       return false;
     }
     const elements = this.getElements();
     if (elements.some((el) => el.type === "embeddable")) {
-      patchMobileView(this.targetView);
+      patchMobileView(targetView);
     }
-    const result = await this.targetView.addElements({
+    const result = await targetView.addElements({
       newElements: elements,
       repositionToCursor,
       save,
@@ -3807,8 +3822,9 @@ export class ExcalidrawAutomate {
       newElementsOnTop,
       shouldRestoreElements,
       captureUpdate,
+      isCurrent: hasAddGuard ? isAddCurrent : undefined,
     });
-    return result;
+    return hasAddGuard && !isAddCurrent() ? false : result;
   }
 
   /**

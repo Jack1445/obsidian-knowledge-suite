@@ -79,6 +79,21 @@ import {
 
 type SceneDataWithFiles = SceneData & { files: BinaryFiles };
 
+type AsyncOperationGuard = () => boolean;
+
+const isAsyncOperationCurrent = (
+  isCurrent?: AsyncOperationGuard,
+): boolean => {
+  if (!isCurrent) {
+    return true;
+  }
+  try {
+    return isCurrent() !== false;
+  } catch {
+    return false;
+  }
+};
+
 type LegacyGridColor = NonNullable<
   NonNullable<SceneData["appState"]>["gridColor"]
 > & {
@@ -1405,7 +1420,10 @@ export class ExcalidrawData {
     }
   }
 
-  private async getText(id: string): Promise<string> {
+  private async getText(
+    id: string,
+    isCurrent?: AsyncOperationGuard,
+  ): Promise<string> {
     const text = this.textElements.get(id);
     if (!text) {
       return null;
@@ -1413,6 +1431,9 @@ export class ExcalidrawData {
     if (this.textMode === TextMode.parsed) {
       if (!text.parsed) {
         const parseRes = await this.parse(text.raw);
+        if (!isAsyncOperationCurrent(isCurrent)) {
+          return null;
+        }
         this.textElements.set(id, {
           raw: text.raw,
           parsed: parseRes.parsed,
@@ -1458,6 +1479,7 @@ export class ExcalidrawData {
    */
   private findNewTextElementsInScene(
     selectedElementIds: { [key: string]: boolean } = {},
+    isCurrent?: AsyncOperationGuard,
   ): boolean {
     //console.log("Excalidraw.Data.findNewTextElementsInScene()");
     //get scene text elements
@@ -1469,6 +1491,9 @@ export class ExcalidrawData {
     let dirty: boolean = false; //to keep track if the json has changed
     let id: string; //will be used to hold the new 8 char long ID for textelements that don't yet appear under # Text Elements
     for (const te of texts) {
+      if (!isAsyncOperationCurrent(isCurrent)) {
+        return dirty;
+      }
       id = te.id;
       //replacing Excalidraw text IDs with my own nanoid, because default IDs may contain
       //characters not recognized by Obsidian block references
@@ -1495,12 +1520,12 @@ export class ExcalidrawData {
         if (!this.textElements.has(id)) {
           const raw = te.rawText && te.rawText !== "" ? te.rawText : te.text; //this is for compatibility with drawings created before the rawText change on ExcalidrawTextElement
           this.textElements.set(id, { raw, parsed: null, hasTextLink: false });
-          void this.parseasync(id, raw);
+          void this.parseasync(id, raw, isCurrent);
         }
       } else if (!this.textElements.has(te.id)) {
         const raw = te.rawText && te.rawText !== "" ? te.rawText : te.text; //this is for compatibility with drawings created before the rawText change on ExcalidrawTextElement
         this.textElements.set(id, { raw, parsed: null, hasTextLink: false });
-        void this.parseasync(id, raw);
+        void this.parseasync(id, raw, isCurrent);
       }
     }
     return dirty;
@@ -1525,8 +1550,13 @@ export class ExcalidrawData {
    * update text element map by deleting entries that are no long in the scene
    * and updating the textElement map based on the text updated in the scene
    */
-  private async updateTextElementsFromScene() {
+  private async updateTextElementsFromScene(
+    isCurrent?: AsyncOperationGuard,
+  ) {
     for (const key of this.textElements.keys()) {
+      if (!isAsyncOperationCurrent(isCurrent)) {
+        return;
+      }
       //find text element in the scene
       const el = this.scene.elements?.filter(
         (el: ExcalidrawElement) => el.type === "text" && el.id === key,
@@ -1534,13 +1564,19 @@ export class ExcalidrawData {
       if (el.length === 0) {
         this.textElements.delete(key); //if no longer in the scene, delete the text element
       } else {
-        const text = await this.getText(key);
+        const text = await this.getText(key, isCurrent);
+        if (!isAsyncOperationCurrent(isCurrent)) {
+          return;
+        }
         const raw =
           this.scene.prevTextMode === TextMode.parsed
             ? el[0].rawText
             : (el[0].originalText ?? el[0].text);
         if (text !== (el[0].originalText ?? el[0].text)) {
           const parseRes = await this.parse(text);
+          if (!isAsyncOperationCurrent(isCurrent)) {
+            return;
+          }
           this.textElements.set(key, {
             raw,
             parsed: parseRes.parsed,
@@ -1551,8 +1587,18 @@ export class ExcalidrawData {
     }
   }
 
-  private async parseasync(key: string, raw: string) {
+  private async parseasync(
+    key: string,
+    raw: string,
+    isCurrent?: AsyncOperationGuard,
+  ) {
+    if (!isAsyncOperationCurrent(isCurrent)) {
+      return;
+    }
     const parseRes = await this.parse(raw);
+    if (!isAsyncOperationCurrent(isCurrent) || !this.textElements) {
+      return;
+    }
     this.textElements.set(key, {
       raw,
       parsed: parseRes.parsed,
@@ -1895,8 +1941,18 @@ export class ExcalidrawData {
     mimeType: MimeType,
     key: FileId,
     name?: string,
+    isCurrent?: AsyncOperationGuard,
   ) {
-    const scene = this.scene;
+    const hasGuard = typeof isCurrent === "function";
+    const sourceFile = this.file;
+    const sourceScene = this.scene;
+    if (
+      !isAsyncOperationCurrent(isCurrent) ||
+      (hasGuard && (!sourceFile || !sourceScene))
+    ) {
+      return null;
+    }
+    const scene = hasGuard ? sourceScene : this.scene;
     let fname = name;
 
     if (!fname) {
@@ -1921,21 +1977,25 @@ export class ExcalidrawData {
     }
 
     const arrayBuffer = await getBinaryFileFromDataURL(dataURL);
-    if (!arrayBuffer) {
+    if (!arrayBuffer || !isAsyncOperationCurrent(isCurrent)) {
       return null;
     }
 
+    const parentFile = hasGuard ? sourceFile : this.file;
     const file = await importFileToVault(
       this.app,
       fname,
       arrayBuffer,
-      this.file,
+      parentFile,
       this.view,
     );
+    if (!file || !isAsyncOperationCurrent(isCurrent)) {
+      return null;
+    }
 
     const embeddedFile = new EmbeddedFile(
       this.plugin,
-      this.file.path,
+      parentFile.path,
       file.path,
     );
 
@@ -1946,6 +2006,9 @@ export class ExcalidrawData {
       isDark: scene.appState?.theme === "dark",
       isSVGwithBitmap: mimeType === "image/svg+xml", //this treat all SVGs as if they had embedded images REF:addIMAGE
     });
+    if (!this.files || !isAsyncOperationCurrent(isCurrent)) {
+      return null;
+    }
     this.setFile(key, embeddedFile);
     return file;
   }
@@ -1991,9 +2054,17 @@ export class ExcalidrawData {
    * deletes fileIds from Excalidraw data for files no longer in the scene
    * @returns
    */
-  private async syncFiles(): Promise<boolean> {
+  private async syncFiles(
+    isCurrent?: AsyncOperationGuard,
+  ): Promise<boolean> {
+    if (!isAsyncOperationCurrent(isCurrent)) {
+      return false;
+    }
     let dirty = false;
     const scene = this.scene;
+    if (!scene) {
+      return false;
+    }
 
     //remove files and equations that no longer have a corresponding image element
     const images = scene.elements.filter(
@@ -2132,7 +2203,11 @@ export class ExcalidrawData {
           fileData.mimeType,
           key as FileId,
           fileData.name,
+          isCurrent,
         );
+        if (!isAsyncOperationCurrent(isCurrent)) {
+          return false;
+        }
       }
     }
 
@@ -2142,12 +2217,27 @@ export class ExcalidrawData {
   public async syncElements(
     newScene: SceneDataWithFiles,
     selectedElementIds?: { [key: string]: boolean },
+    isCurrent?: AsyncOperationGuard,
   ): Promise<boolean> {
-    this.scene = newScene as ExcalidrawDataScene;
+    const hasGuard = typeof isCurrent === "function";
+    const syncScene = newScene as ExcalidrawDataScene;
+    const isSyncCurrent = (): boolean =>
+      isAsyncOperationCurrent(isCurrent) &&
+      (!hasGuard || this.scene === syncScene);
+    if (!isSyncCurrent()) {
+      return false;
+    }
+    this.scene = syncScene;
     let result = false;
     if (!this.compatibilityMode) {
-      result = await this.syncFiles();
+      result = await this.syncFiles(isSyncCurrent);
+      if (!isSyncCurrent()) {
+        return false;
+      }
       this.scene.files = {}; //files contains the dataURLs of files. Once synced these are all saved to disk
+    }
+    if (!isSyncCurrent()) {
+      return false;
     }
     this.updateElementLinksFromScene();
     result =
@@ -2157,8 +2247,14 @@ export class ExcalidrawData {
       this.setUrlPrefix() ||
       this.setShowLinkBrackets() ||
       this.findNewElementLinksInScene();
-    await this.updateTextElementsFromScene();
-    return result || this.findNewTextElementsInScene(selectedElementIds);
+    await this.updateTextElementsFromScene(isSyncCurrent);
+    if (!isSyncCurrent()) {
+      return false;
+    }
+    return (
+      result ||
+      this.findNewTextElementsInScene(selectedElementIds, isSyncCurrent)
+    );
   }
 
   public async updateScene(newScene: string) {
@@ -2255,8 +2351,15 @@ export class ExcalidrawData {
     elementID: string,
     rawText: string,
     rawOriginalText: string,
+    isCurrent?: AsyncOperationGuard,
   ): Promise<{ parseResult: string; link: string }> {
+    if (!isAsyncOperationCurrent(isCurrent)) {
+      return { parseResult: null, link: null };
+    }
     const parseResult = await this.parse(rawOriginalText);
+    if (!isAsyncOperationCurrent(isCurrent)) {
+      return { parseResult: null, link: null };
+    }
     this.textElements.set(elementID, {
       raw: rawOriginalText,
       parsed: parseResult.parsed,
