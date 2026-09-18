@@ -120,7 +120,7 @@ export class SemanticFilterCanvasView extends ItemView {
     const normalizedSearch = this.search.trim().toLocaleLowerCase();
     const matches = snapshot.matches.filter((match) => !normalizedSearch ||
       match.unit.name.toLocaleLowerCase().includes(normalizedSearch) ||
-      match.documentPath.toLocaleLowerCase().includes(normalizedSearch));
+      (match.documentPath ?? "").toLocaleLowerCase().includes(normalizedSearch));
 
     this.contentEl.empty();
     const header = this.contentEl.createDiv({ cls: "ks-semantic-filter-header" });
@@ -210,6 +210,7 @@ export class SemanticFilterCanvasView extends ItemView {
       text: format(t("SEMANTIC_FILTER_RESULT_SUMMARY"), {
         MATCHED: matches.length,
         LINKED: snapshot.linkedUnitCount,
+        UNBOUND: snapshot.unboundUnitCount,
       }),
     });
     status.createSpan({ cls: "ks-semantic-filter-status__readonly", text: t("SEMANTIC_FILTER_READ_ONLY") });
@@ -222,7 +223,7 @@ export class SemanticFilterCanvasView extends ItemView {
       });
     }
 
-    if (snapshot.linkedUnitCount === 0) {
+    if (snapshot.linkedUnitCount + snapshot.unboundUnitCount === 0) {
       this.renderEmpty("link-2-off", t("SEMANTIC_FILTER_NO_BOUND_TITLE"), t("SEMANTIC_FILTER_NO_BOUND_DESC"));
       return;
     }
@@ -335,7 +336,7 @@ export class SemanticFilterCanvasView extends ItemView {
     setIcon(icon, "boxes");
     const copy = header.createDiv({ cls: "ks-semantic-filter-card__copy" });
     copy.createDiv({ cls: "ks-semantic-filter-card__name", text: match.unit.name });
-    copy.createDiv({ cls: "ks-semantic-filter-card__document", text: match.documentPath });
+    copy.createDiv({ cls: "ks-semantic-filter-card__document", text: match.documentPath ?? t("SEMANTIC_FILTER_UNBOUND_DOCUMENT") });
     const grip = header.createSpan({ cls: "ks-semantic-filter-card__grip" });
     setIcon(grip, "grip");
     const preview = card.createDiv({ cls: "ks-semantic-filter-card__preview is-loading" });

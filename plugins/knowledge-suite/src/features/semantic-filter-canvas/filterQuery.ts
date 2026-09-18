@@ -12,10 +12,10 @@ export type SemanticFilterDocumentRecord = {
   values: DocumentFieldValues;
 };
 
-/** A unit matched exclusively through the metadata of its bound Markdown file. */
+/** A displayed unit, optionally linked to Markdown metadata. */
 export type SemanticFilterMatch = {
   unit: SemanticUnitDefinition;
-  documentPath: string;
+  documentPath: string | null;
   values: DocumentFieldValues;
 };
 
@@ -31,7 +31,11 @@ export const selectSemanticFilterUnits = (
   filter: DocumentFilterDefinition,
 ): SemanticFilterMatch[] => units
   .flatMap((unit): SemanticFilterMatch[] => {
-    if (!unit.documentPath) return [];
+    if (!unit.documentPath) {
+      return filter.conditions.length === 0
+        ? [{ unit, documentPath: null, values: {} }]
+        : [];
+    }
     const document = documents.get(unit.documentPath);
     if (!document || !matchesDocumentFilter(document.values, fields, filter)) return [];
     return [{ unit, documentPath: document.path, values: { ...document.values } }];

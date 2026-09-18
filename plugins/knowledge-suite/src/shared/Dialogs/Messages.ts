@@ -31,6 +31,7 @@ I build this plugin as a labor of love. Curious about the philosophy behind it? 
 - Secondary actions in the semantic-unit filter dialog now use crisp white surfaces and subtle borders while the primary action retains its purple emphasis.
 - Field and operator selectors in filter-condition rows now share the same clean white surface as the dialog's inputs and secondary actions.
 - The semantic filter canvas now supports middle-button drag panning from anywhere in the viewport, while retaining left-button background panning.
+- Semantic units can now be renamed from the management table by using the context menu or double-clicking a unit name. Renaming leaves bound Markdown, unit content, and synchronized instances unchanged.
 `,
   "2.26.4": `
 ## Added in the custom fork

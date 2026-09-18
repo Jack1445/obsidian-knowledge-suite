@@ -167,6 +167,59 @@ describe("semantic unit store", () => {
     expect(store.getInstance(created.instance.id)).toEqual(created.instance);
   });
 
+  it("renames only the semantic unit definition and preserves synchronized data", async () => {
+    const { store, persisted } = createStore();
+    await store.load();
+    const created = await store.createUnitWithInstance({
+      name: "原单位",
+      documentPath: "论文阅读笔记/原文.md",
+      tags: ["触觉"],
+      properties: { status: "reading" },
+      owner: "研究项目",
+      content,
+      instance: {
+        canvasPath: "Canvas A.md",
+        memberElementIds: { "member-a": "a-1", "member-b": "a-2" },
+        origin: { x: 120, y: 240 },
+      },
+    });
+    await store.createSynchronizedInstance({
+      unitId: created.unit.id,
+      canvasPath: "Canvas B.md",
+      memberElementIds: { "member-a": "b-1", "member-b": "b-2" },
+      origin: { x: 900, y: 600 },
+    });
+    const originalUnit = store.getUnit(created.unit.id);
+    const originalInstances = store.getInstancesForUnit(created.unit.id);
+
+    await store.renameUnit(created.unit.id, "  新单位  ");
+
+    const renamed = store.getUnit(created.unit.id);
+    expect(renamed?.name).toBe("新单位");
+    expect(renamed).toEqual({
+      ...originalUnit,
+      name: "新单位",
+      updatedAt: renamed?.updatedAt,
+    });
+    expect(store.getInstancesForUnit(created.unit.id)).toEqual(originalInstances);
+    expect(persisted()?.units[created.unit.id]?.name).toBe("新单位");
+  });
+
+  it("rejects empty or duplicate semantic unit names without changing stored data", async () => {
+    const { store, persisted } = createStore();
+    await store.load();
+    const first = await store.createUnit({ name: "第一个单位", content });
+    const second = await store.createUnit({ name: "第二个单位", content });
+    const before = structuredClone(persisted());
+
+    await expect(store.renameUnit(first.id, "   ")).rejects.toThrow("元素单位名称不能为空");
+    await expect(store.renameUnit(first.id, " 第二个单位 ")).rejects.toThrow("已存在");
+
+    expect(store.getUnit(first.id)).toEqual(first);
+    expect(store.getUnit(second.id)).toEqual(second);
+    expect(persisted()).toEqual(before);
+  });
+
   it("stops stale canonical writes and leaves the current revision intact", async () => {
     const { store } = createStore();
     await store.load();

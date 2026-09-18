@@ -52,7 +52,7 @@ export class SemanticFilterQueryService {
     ));
     return {
       matches: selectSemanticFilterUnits(
-        availableLinkedUnits,
+        units,
         documents,
         this.metadata.getFields().filter((field) => !field.archived),
         filter,

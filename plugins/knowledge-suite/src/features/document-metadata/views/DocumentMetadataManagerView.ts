@@ -12,6 +12,7 @@ import { FieldValueModal } from "../ui/FieldValueModal";
 import { FilterBuilderModal } from "../ui/FilterBuilderModal";
 import { SemanticUnitDeleteModal } from "../../semantic-units/SemanticUnitDeleteModal";
 import { SemanticMarkdownPickerModal } from "../../semantic-units/SemanticMarkdownPickerModal";
+import { SemanticUnitRenameModal } from "../../semantic-units/SemanticUnitRenameModal";
 import type { SemanticUnitDefinition, SemanticUnitInstance } from "../../semantic-units/types";
 import type {
   CreateDocumentFieldInput,
@@ -431,7 +432,18 @@ export class DocumentMetadataManagerView extends ItemView {
       const identity = nameCell.createDiv({ cls: "ks-semantic-manager__unit" });
       const icon = identity.createSpan({ cls: "ks-semantic-manager__unit-icon" });
       setIcon(icon, unit.kind === "document-backed" ? "file-box" : "box");
-      identity.createSpan({ cls: "ks-semantic-manager__unit-name", text: unit.name });
+      const name = identity.createSpan({
+        cls: "ks-semantic-manager__unit-name",
+        text: unit.name,
+        attr: {
+          title: t("SEMANTIC_UNIT_RENAME_DOUBLE_CLICK").replace("{NAME}", unit.name),
+        },
+      });
+      name.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.startInlineSemanticUnitRename(identity, name, unit);
+      });
       const documentCell = row.createEl("td");
       if (unit.documentPath) {
         const documentButton = documentCell.createEl("button", {
@@ -479,6 +491,10 @@ export class DocumentMetadataManagerView extends ItemView {
     if (!semanticUnits) return;
     const menu = new Menu();
     menu.addItem((item) => item
+      .setTitle(t("SEMANTIC_UNIT_RENAME_ACTION"))
+      .setIcon("pencil")
+      .onClick(() => this.openSemanticUnitRename(unit)));
+    menu.addItem((item) => item
       .setTitle(t("SEMANTIC_FILTER_MARKDOWN_CHANGE"))
       .setIcon("file-cog")
       .onClick(() => this.openSemanticMarkdownPicker(unit.id, unit.documentPath)));
@@ -513,6 +529,70 @@ export class DocumentMetadataManagerView extends ItemView {
         },
       ).open()));
     menu.showAtMouseEvent(event);
+  }
+
+  private openSemanticUnitRename(unit: SemanticUnitDefinition): void {
+    const semanticUnits = this.controller.semanticUnits;
+    if (!semanticUnits) return;
+    new SemanticUnitRenameModal(this.app, unit, async (name) => {
+      await semanticUnits.store.renameUnit(unit.id, name);
+      new Notice(t("SEMANTIC_UNIT_RENAME_SUCCESS").replace("{NAME}", name));
+    }).open();
+  }
+
+  private startInlineSemanticUnitRename(
+    identity: HTMLDivElement,
+    nameElement: HTMLSpanElement,
+    unit: SemanticUnitDefinition,
+  ): void {
+    if (identity.querySelector(".ks-semantic-manager__unit-name-input")) return;
+    const semanticUnits = this.controller.semanticUnits;
+    if (!semanticUnits) return;
+    const input = identity.createEl("input", {
+      cls: "ks-semantic-manager__unit-name-input",
+      attr: { type: "text", "aria-label": t("SEMANTIC_UNIT_RENAME_FIELD") },
+    });
+    input.value = unit.name;
+    nameElement.replaceWith(input);
+    input.focus();
+    input.select();
+    let finished = false;
+    const restore = (): void => {
+      if (finished) return;
+      finished = true;
+      input.replaceWith(nameElement);
+    };
+    const save = (): void => {
+      if (finished) return;
+      const nextName = input.value.trim();
+      if (nextName === unit.name) {
+        restore();
+        return;
+      }
+      finished = true;
+      void semanticUnits.store.renameUnit(unit.id, nextName)
+        .then(() => {
+          new Notice(t("SEMANTIC_UNIT_RENAME_SUCCESS").replace("{NAME}", nextName));
+          input.replaceWith(nameElement);
+          nameElement.setText(nextName);
+        })
+        .catch((error: unknown) => {
+          finished = false;
+          new Notice(error instanceof Error ? error.message : t("SEMANTIC_UNIT_RENAME_FAILED"));
+          input.focus();
+          input.select();
+        });
+    };
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        save();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        restore();
+      }
+    });
+    input.addEventListener("blur", save);
   }
 
   private openSemanticMarkdownPicker(unitId: string, selectedPath: string | null): void {

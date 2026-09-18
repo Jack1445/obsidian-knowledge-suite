@@ -58,7 +58,7 @@ describe("semantic filter query", () => {
     expect(matches.map((match) => match.unit.id)).toEqual(["bound-match"]);
   });
 
-  it("shows every valid Markdown-backed unit when no conditions are active", () => {
+  it("shows bound and unbound units when no conditions are active", () => {
     const documents = new Map([
       ["Notes/A.md", { path: "Notes/A.md", values: {} }],
       ["Notes/B.md", { path: "Notes/B.md", values: { year: 2025 } }],
@@ -69,6 +69,6 @@ describe("semantic filter query", () => {
       unit("free", null),
     ], documents, [field], { match: "all", conditions: [] });
 
-    expect(matches.map((match) => match.unit.id)).toEqual(["a-unit", "z-unit"]);
+    expect(matches.map((match) => match.unit.id)).toEqual(["a-unit", "free", "z-unit"]);
   });
 });
