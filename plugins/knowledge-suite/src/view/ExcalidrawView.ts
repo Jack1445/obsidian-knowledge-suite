@@ -67,6 +67,7 @@ import { TextMode, getTextMode } from "../shared/TextMode";
 import { ExcalidrawSidepanelView } from "./sidepanel/Sidepanel";
 import {
   isCurrentViewLoad as isCurrentViewLoadIdentity,
+  isSameFile as isSameFileIdentity,
   isStableViewForFile as isStableViewForFileIdentity,
 } from "./view-load-identity";
 import {
@@ -437,6 +438,7 @@ export default class ExcalidrawView
   public allowFrameButtonsInViewMode: boolean = false; //override for ExcaliBrain
   private _hookServer: ExcalidrawAutomate | null = null;
   public lastSaveTimestamp: number = 0; //used to validate if incoming file should sync with open file
+  private saveSequence = 0;
   public lastSceneLoadTime: number = 0; //set when loadSceneFiles completes; used by leaf-switch change detection
   private lastLoadedFile: TFile | null = null;
   /**
@@ -1183,7 +1185,12 @@ export default class ExcalidrawView
       }
     };
 
-    if (!this.isLoaded || !guardAllowsSave()) {
+    // `isLoaded` marks the view lifecycle, while ExcalidrawData.loaded marks
+    // that the scene/text metadata used by prepareGetViewData is ready.  The
+    // two flags are intentionally checked separately: during a new-file load
+    // the view can become interactive briefly before the data model finishes.
+    // Saving in that window would serialize the old `this.data` snapshot.
+    if (!this.isLoaded || !this.excalidrawData?.loaded || !guardAllowsSave()) {
       return;
     }
     const saveFile = this.file;
@@ -1330,7 +1337,21 @@ export default class ExcalidrawView
           abortSave();
           return;
         }
+        const expectedSavedData = this.getViewData();
+        const persistedData = await this.app.vault.read(saveFile);
+        if (persistedData !== expectedSavedData) {
+          if (!isSaveCurrent()) {
+            abortSave();
+            return;
+          }
+          await this.app.vault.modify(saveFile, expectedSavedData);
+        }
+        if (!isSaveCurrent()) {
+          abortSave();
+          return;
+        }
         dirtyWasCleared = false;
+        this.saveSequence += 1;
 
         //saving to backup with a delay in case application closes in the meantime, I want to avoid both save and backup corrupted.
         const path = saveFile.path;
@@ -2489,13 +2510,33 @@ export default class ExcalidrawView
       }
       return;
     }
+    let loadWait = 0;
+    while (
+      (!this.isLoaded || !this.excalidrawData?.loaded) &&
+      loadWait++ < 40
+    ) {
+      await sleep(50);
+    }
+    if (!this.isLoaded || !this.excalidrawData?.loaded) {
+      if (!silent) new Notice(t("FORCE_SAVE_ABORTED"));
+      return;
+    }
+    const saveSequenceBefore = this.saveSequence;
     if (this.preventReloadResetTimer) {
       window.clearTimeout(this.preventReloadResetTimer);
       this.preventReloadResetTimer = null;
     }
     this.semaphores.preventReload = false;
     this.semaphores.forceSaving = true;
-    await this.save(false, true, true);
+    await this.save(true, true, true);
+    // A manual save must correspond to an actual completed save attempt.  Do
+    // not report success when save() returned early (for example while the
+    // data model was still loading or a load-identity guard rejected it).
+    if (this.saveSequence === saveSequenceBefore) {
+      if (!silent) new Notice(t("FORCE_SAVE_ABORTED"));
+      this.semaphores.forceSaving = false;
+      return;
+    }
     this.plugin.triggerEmbedUpdates();
     await this.loadSceneFiles();
     if (!this.plugin.semanticUnits?.isProcessingView(this)) {
@@ -3229,7 +3270,7 @@ export default class ExcalidrawView
    * @returns
    */
   public async reload(fullreload: boolean = false, file?: TFile) {
-    const loadOnModifyTrigger = file && file === this.file;
+    const loadOnModifyTrigger = Boolean(file && isSameFileIdentity(file, this.file));
 
     //once you've finished editing the embeddable, the first time the file
     //reloads will be because of the embeddable changed the file,
@@ -3261,7 +3302,7 @@ export default class ExcalidrawView
       return;
     }
     const reloadFile = this.file;
-    if (!reloadFile || (file && file !== reloadFile)) {
+    if (!reloadFile || (file && !isSameFileIdentity(file, reloadFile))) {
       return;
     }
     const reloadGeneration = ++this.viewLoadGeneration;
@@ -3288,7 +3329,7 @@ export default class ExcalidrawView
     }
     if (
       !this.isCurrentViewLoad(reloadFile, reloadGeneration) ||
-      this.excalidrawData.file !== reloadFile
+      !isSameFileIdentity(this.excalidrawData.file, reloadFile)
     ) {
       return;
     }
@@ -3564,7 +3605,7 @@ export default class ExcalidrawView
       await this.plugin.awaitInit();
       if (
         !this.isCurrentViewLoad(requestedFile, loadGeneration) ||
-        this.lastLoadedFile === requestedFile
+        isSameFileIdentity(this.lastLoadedFile, requestedFile)
       ) {
         return;
       }
@@ -3737,7 +3778,7 @@ export default class ExcalidrawView
 
         if (
           !this.isCurrentViewLoad(requestedFile, loadGeneration) ||
-          this.excalidrawData.file !== requestedFile
+          !isSameFileIdentity(this.excalidrawData.file, requestedFile)
         ) {
           return;
         }
@@ -3802,7 +3843,7 @@ export default class ExcalidrawView
 
         if (
           !this.isCurrentViewLoad(requestedFile, loadGeneration) ||
-          this.excalidrawData.file !== requestedFile
+          !isSameFileIdentity(this.excalidrawData.file, requestedFile)
         ) {
           return;
         }
@@ -3848,7 +3889,7 @@ export default class ExcalidrawView
             }
             if (
               this.isCurrentViewLoad(requestedFile, loadGeneration) &&
-              this.excalidrawData.file === requestedFile
+              isSameFileIdentity(this.excalidrawData.file, requestedFile)
             ) {
               void this.plugin.scriptEngine.executeScript(
                 this,
@@ -4437,7 +4478,7 @@ export default class ExcalidrawView
       expectedFile &&
       (expectedGeneration === undefined ||
         !this.isCurrentViewLoad(expectedFile, expectedGeneration) ||
-        this.excalidrawData?.file !== expectedFile)
+        !isSameFileIdentity(this.excalidrawData?.file ?? null, expectedFile))
     ) {
       return;
     }
@@ -4573,7 +4614,7 @@ export default class ExcalidrawView
         expectedFile &&
         (expectedGeneration === undefined ||
           !this.isCurrentViewLoad(expectedFile, expectedGeneration) ||
-          this.excalidrawData?.file !== expectedFile)
+          !isSameFileIdentity(this.excalidrawData?.file ?? null, expectedFile))
       ) {
         return;
       }
@@ -4584,7 +4625,7 @@ export default class ExcalidrawView
       expectedFile &&
       (expectedGeneration === undefined ||
         !this.isCurrentViewLoad(expectedFile, expectedGeneration) ||
-        this.excalidrawData?.file !== expectedFile)
+      !isSameFileIdentity(this.excalidrawData?.file ?? null, expectedFile))
     ) {
       return;
     }

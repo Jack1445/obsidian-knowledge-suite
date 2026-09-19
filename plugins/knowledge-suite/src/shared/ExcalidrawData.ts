@@ -2224,7 +2224,10 @@ export class ExcalidrawData {
     const isSyncCurrent = (): boolean =>
       isAsyncOperationCurrent(isCurrent) &&
       (!hasGuard || this.scene === syncScene);
-    if (!isSyncCurrent()) {
+    // The incoming scene is a fresh snapshot, not this.scene yet. Validate
+    // file/load ownership before adopting it; scene identity is only a valid
+    // guard AFTER adoption, across the asynchronous work below.
+    if (!isAsyncOperationCurrent(isCurrent)) {
       return false;
     }
     this.scene = syncScene;

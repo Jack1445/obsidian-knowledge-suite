@@ -17,6 +17,7 @@ import type {
   ExcalidrawImageElement,
 } from "@zsviczian/excalidraw/types/element/src/types";
 import type ExcalidrawView from "src/view/ExcalidrawView";
+import { isSameFile } from "src/view/view-load-identity";
 import type { ExcalidrawSidepanelTab } from "./SidepanelTab";
 import {
   getMarkdownImageRenderSettings,
@@ -1696,8 +1697,8 @@ class MarkdownImageEditorController {
         const excalidrawData = ownerView.excalidrawData;
         if (
           !excalidrawData ||
-          excalidrawData.file !== ownerFile ||
-          ownerView.file !== ownerFile
+          !isSameFile(excalidrawData.file, ownerFile) ||
+          !isSameFile(ownerView.file, ownerFile)
         ) {
           return;
         }

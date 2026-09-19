@@ -11,9 +11,17 @@ export function isCurrentViewLoad<T>(
 ): boolean {
   return Boolean(
     expectedFile &&
-      currentFile === expectedFile &&
+      isSameFile(currentFile, expectedFile) &&
       currentGeneration === expectedGeneration,
   );
+}
+
+export function isSameFile<T>(left: T | null, right: T | null): boolean {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const leftPath = (left as { path?: unknown }).path;
+  const rightPath = (right as { path?: unknown }).path;
+  return typeof leftPath === "string" && leftPath === rightPath;
 }
 
 export function isStableViewForFile<T>(
@@ -31,7 +39,7 @@ export function isStableViewForFile<T>(
       currentGeneration,
       expectedGeneration,
     ) &&
-      lastLoadedFile === expectedFile &&
-      dataFile === expectedFile,
+      (!lastLoadedFile || isSameFile(lastLoadedFile, expectedFile)) &&
+      isSameFile(dataFile, expectedFile),
   );
 }

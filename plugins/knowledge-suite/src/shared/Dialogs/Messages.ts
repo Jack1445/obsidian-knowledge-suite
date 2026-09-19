@@ -19,6 +19,7 @@ I build this plugin as a labor of love. Curious about the philosophy behind it? 
 `,
   "0.1.0-beta.1": `
 ## Knowledge Suite beta
+- Fixed guarded 2D canvas saves serializing the previous scene instead of current edits. File/load ownership is checked before adopting the current snapshot, while asynchronous scene-replacement protections remain active.
 - Added an optional, collapsed “Default paths and names” section to the minimal global settings page. Separate 2D and 3D managed-canvas names and storage folders affect only newly created canvases; blank values preserve the existing behavior.
 - Replaced the duplicate global settings tabs with one minimal, control-free information page. Inherited Excalidraw integration, promotional, update, and experimental settings remain hidden; contextual controls stay beside the features they affect, while mandatory backup and compatibility safeguards stay active.
 - The plugin now uses the unified Knowledge Suite identity and the \`knowledge-suite\` plugin ID.
