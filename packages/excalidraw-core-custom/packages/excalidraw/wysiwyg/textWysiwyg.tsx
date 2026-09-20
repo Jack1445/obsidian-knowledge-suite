@@ -11,7 +11,6 @@ import {
   MIME_TYPES,
   applyDarkModeFilter,
   isRTL,
-  getVerticalOffset,
 } from "@excalidraw/common";
 import { pointFrom, pointRotateRads, type Radians } from "@excalidraw/math";
 
@@ -285,26 +284,24 @@ export const textWysiwyg = ({
       0,
       updatedTextElement,
     ).some((run) => run.type === "formula");
-    // The textarea must retain the raw formula source for selection and
-    // submission, but painting that source would place its suffix at the raw
-    // LaTeX width. The overlay below paints the complete visual line instead.
+    // Formatted glyphs and native textarea glyphs must never paint together.
+    // Bold also changes advance widths, so use the same visual selection and
+    // caret mapping as formulas, including plain runs and plain-only lines.
+    const useVisualOverlay = (hasBold || hasFormula) &&
+      !updatedTextElement.containerId && !isRTL(editable.value);
     const editorTextColor = applyDarkModeFilter(
       updatedTextElement.strokeColor,
       app.state.theme === THEME.DARK,
     );
-    editable.style.color = hasFormula
+    editable.style.color = useVisualOverlay
       ? "transparent"
       : editorTextColor;
-    editable.style.caretColor = hasFormula ? "transparent" : editorTextColor;
+    editable.style.caretColor = useVisualOverlay ? "transparent" : editorTextColor;
     editable.classList.toggle(
       "excalidraw-wysiwyg--inline-formula",
-      hasFormula,
+      useVisualOverlay,
     );
-    if (
-      (!hasBold && !hasFormula) ||
-      updatedTextElement.containerId ||
-      isRTL(editable.value)
-    ) {
+    if (!useVisualOverlay) {
       formulaLayer.hidden = true;
       return;
     }
@@ -324,11 +321,6 @@ export const textWysiwyg = ({
     const lineHeightPx = getLineHeightInPx(
       updatedTextElement.fontSize,
       updatedTextElement.lineHeight,
-    );
-    const verticalOffset = getVerticalOffset(
-      updatedTextElement.fontFamily,
-      updatedTextElement.fontSize,
-      lineHeightPx,
     );
     const canvasBackground =
       app.state.viewBackgroundColor === "transparent"
@@ -357,11 +349,11 @@ export const textWysiwyg = ({
         lineSourceOffset,
         updatedTextElement,
       );
-      if (
-        !hasFormula &&
-        !runs.some((run) => run.type === "formula" || run.bold)
-      ) {
-        return;
+      // Empty lines still need a hit target and a visible caret now that the
+      // native textarea is transparent (including a newly inserted newline).
+      if (runs.length === 0) {
+        runs.push({ type: "text", text: "", bold: false,
+          sourceStart: lineSourceOffset, sourceEnd: lineSourceOffset });
       }
       const visualLineWidth = getInlineTextLineWidth(runs, updatedTextElement);
       let cursorX =
@@ -374,7 +366,7 @@ export const textWysiwyg = ({
       runs.forEach((run) => {
         if (run.type === "text") {
           const runWidth = getLineWidth(run.text, run.bold ? boldFont : font);
-          if (shouldRenderInlineTextEditorTextRun(run, hasFormula)) {
+          if (shouldRenderInlineTextEditorTextRun(run, useVisualOverlay)) {
             const selectedStart = Math.max(
               visualSelectionStart,
               run.sourceStart,
@@ -383,7 +375,7 @@ export const textWysiwyg = ({
               visualSelectionEnd,
               run.sourceEnd,
             );
-            if (hasFormula && selectedStart < selectedEnd) {
+            if (selectedStart < selectedEnd) {
               const selectedPrefixWidth = getLineWidth(
                 run.text.slice(0, selectedStart - run.sourceStart),
                 run.bold ? boldFont : font,
@@ -419,9 +411,7 @@ export const textWysiwyg = ({
               top: `${lineIndex * lineHeightPx}px`,
               width: `${Math.max(1, runWidth)}px`,
               height: `${lineHeightPx}px`,
-              // Keep the native textarea selection and caret visible below
-              // the formatted glyph. Formula runs still use an opaque
-              // background because they must hide their LaTeX source.
+              // Selection and caret are painted by this same visual layer.
               background: "transparent",
               color: applyDarkModeFilter(
                 updatedTextElement.strokeColor,
@@ -432,10 +422,10 @@ export const textWysiwyg = ({
               lineHeight: `${lineHeightPx}px`,
               whiteSpace: "pre",
               opacity: `${updatedTextElement.opacity / 100}`,
-              pointerEvents: hasFormula ? "auto" : "none",
-              cursor: hasFormula ? "text" : "default",
+              pointerEvents: "auto",
+              cursor: "text",
             });
-            if (hasFormula) {
+            if (useVisualOverlay) {
               text.onpointerdown = beginInlineSelectionDrag;
               inlineTextHitTargets.push({
                 element: text,
@@ -461,7 +451,7 @@ export const textWysiwyg = ({
             formulaLayer!.appendChild(text);
           }
           if (
-            hasFormula &&
+            useVisualOverlay &&
             !visualCaretRendered &&
             editable.selectionStart === editable.selectionEnd &&
             editable.selectionStart >= run.sourceStart &&
@@ -531,10 +521,10 @@ export const textWysiwyg = ({
         Object.assign(image.style, {
           display: "block",
           width: `${size.width}px`,
-          height: `${Math.min(
-            size.height,
-            Math.max(1, verticalOffset + size.height * 0.2),
-          )}px`,
+          // The canvas renderer draws the complete formula bitmap at the
+          // text font size. Cropping this to a small fraction of the line
+          // made formulas appear as tiny marks while editing.
+          height: `${size.height}px`,
           objectFit: "contain",
           opacity: `${updatedTextElement.opacity / 100}`,
           pointerEvents: "none",
@@ -566,7 +556,7 @@ export const textWysiwyg = ({
               : run.sourceEnd,
         });
         if (
-          hasFormula &&
+          useVisualOverlay &&
           !visualCaretRendered &&
           editable.selectionStart === editable.selectionEnd &&
           editable.selectionStart >= run.sourceStart &&
