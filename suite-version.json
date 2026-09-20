@@ -1,5 +1,5 @@
 {
-  "suiteVersion": "0.1.0",
+  "suiteVersion": "0.1.1",
   "components": {
     "excalidrawCore": {
       "version": "0.18.118",
