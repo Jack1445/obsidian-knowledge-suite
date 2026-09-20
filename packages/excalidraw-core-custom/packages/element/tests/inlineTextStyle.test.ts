@@ -1,6 +1,9 @@
 import { getFontString } from "@excalidraw/common";
 
-import { getInlineFormulaEditableText } from "../src/inlineFormula";
+import {
+  getInlineFormulaEditableText,
+  getInlineFormulaRenderSize,
+} from "../src/inlineFormula";
 import {
   getInlineTextLineWidth,
   getInlineTextRunCaretOffset,
@@ -55,6 +58,17 @@ describe("inline text bold ranges", () => {
   });
 });
 
+describe("inline formula rendering", () => {
+  it("keeps formula glyphs visually close to the surrounding text size", () => {
+    const size = getInlineFormulaRenderSize(
+      { latex: "x", dataURL: "data:image/svg+xml,test", width: 56, height: 56 },
+      20,
+    );
+    expect(size.height).toBeCloseTo(36);
+    expect(size.width).toBeCloseTo(36);
+  });
+});
+
 describe("inline formula editor layout", () => {
   it("keeps suffix text adjacent to the rendered formula width", () => {
     const text = "before \\(formula-with-a-very-long-source\\) after";
@@ -83,7 +97,12 @@ describe("inline formula editor layout", () => {
       getLineWidth(" after", font);
     const renderedWidth =
       getLineWidth("before ", font) +
-      20 +
+      getInlineFormulaRenderSize({
+        latex: "formula-with-a-very-long-source",
+        dataURL: "data:image/svg+xml,test",
+        width: 10,
+        height: 10,
+      }, element.fontSize).width +
       getLineWidth(" after", font);
 
     expect(getInlineTextLineWidth(runs, element)).toBeCloseTo(renderedWidth);

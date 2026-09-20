@@ -39,6 +39,11 @@ export type InlineFormulaData = {
 
 export type InlineFormulaRenderResult = InlineFormulaRecord;
 
+// The rendered formula bitmap includes transparent space around the glyph.
+// This baseline ratio keeps the enlarged bitmap visually centered against
+// neighboring text instead of leaving it too high in the line.
+export const INLINE_FORMULA_BASELINE_RATIO = 0.68;
+
 export type InlineFormulaSourceRange = {
   start: number;
   end: number;
@@ -205,7 +210,11 @@ export const getInlineFormulaRenderSize = (
   record: InlineFormulaRecord,
   fontSize: number,
 ) => {
-  const height = fontSize;
+  // Formula SVGs include a small amount of vertical export padding. Scaling
+  // that full bitmap to exactly `fontSize` makes the glyph itself visibly
+  // smaller than neighboring text. Keep the formula's aspect ratio while
+  // giving the rendered glyph a text-sized visual height.
+  const height = fontSize * 1.8;
   return {
     width: (record.width / record.height) * height,
     height,
@@ -295,7 +304,8 @@ export const findInlineFormulaAtScenePoint = (
         continue;
       }
       const size = getInlineFormulaRenderSize(run.record, element.fontSize);
-      const formulaTop = baselineY - size.height * 0.8;
+      const formulaTop =
+        baselineY - size.height * INLINE_FORMULA_BASELINE_RATIO;
       const formulaBottom = formulaTop + size.height;
       if (
         localX >= cursorX - tolerance &&

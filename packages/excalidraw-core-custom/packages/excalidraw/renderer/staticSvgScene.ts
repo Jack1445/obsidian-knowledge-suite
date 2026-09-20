@@ -21,7 +21,10 @@ import {
 import { LinearElementEditor } from "@excalidraw/element";
 import { getBoundTextElement, getContainerElement } from "@excalidraw/element";
 import { getLineHeightInPx } from "@excalidraw/element";
-import { getInlineFormulaRenderSize } from "@excalidraw/element"; // zsviczian -- export native text with inline formula images
+import {
+  getInlineFormulaRenderSize,
+  INLINE_FORMULA_BASELINE_RATIO,
+} from "@excalidraw/element"; // zsviczian -- export native text with inline formula images
 import {
   getInlineBoldFontString,
   getInlineTextLineWidth,
@@ -844,7 +847,10 @@ const renderElementToSvg = (
             );
             image.setAttribute("href", run.record.dataURL);
             image.setAttribute("x", `${cursorX}`);
-            image.setAttribute("y", `${baselineY - size.height * 0.8}`);
+            image.setAttribute(
+              "y",
+              `${baselineY - size.height * INLINE_FORMULA_BASELINE_RATIO}`,
+            );
             image.setAttribute("width", `${size.width}`);
             image.setAttribute("height", `${size.height}`);
             node.appendChild(image);

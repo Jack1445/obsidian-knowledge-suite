@@ -58,6 +58,7 @@ import { getLineHeightInPx } from "./textMeasurements";
 import {
   getInlineFormulaImage,
   getInlineFormulaRenderSize,
+  INLINE_FORMULA_BASELINE_RATIO,
 } from "./inlineFormula"; // zsviczian -- render formula runs without replacing native text
 import {
   getInlineBoldFontString,
@@ -624,7 +625,7 @@ const drawElementOnCanvas = (
               context.drawImage(
                 image,
                 cursorX,
-                baselineY - size.height * 0.8,
+                baselineY - size.height * INLINE_FORMULA_BASELINE_RATIO,
                 size.width,
                 size.height,
               );
