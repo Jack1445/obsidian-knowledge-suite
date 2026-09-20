@@ -1,6 +1,6 @@
 {
   "name": "knowledge-suite",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "A unified Obsidian visual knowledge workspace combining Excalidraw and Knowledge Map.",

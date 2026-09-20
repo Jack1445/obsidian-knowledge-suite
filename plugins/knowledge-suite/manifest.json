@@ -1,11 +1,11 @@
 {
   "id": "knowledge-suite",
   "name": "Knowledge Suite",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0",
   "minAppVersion": "1.8.7",
-  "description": "A unified visual knowledge workspace combining Excalidraw drawing and Knowledge Map navigation.",
+  "description": "A unified visual knowledge workspace for Excalidraw-style canvases, knowledge maps, Markdown properties, semantic units, and filtered overviews.",
   "author": "Jack1445",
   "authorUrl": "https://github.com/Jack1445",
   "helpUrl": "https://github.com/Jack1445/obsidian-knowledge-suite#readme",
-  "isDesktopOnly": false
+  "isDesktopOnly": true
 }
