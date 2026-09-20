@@ -8,7 +8,7 @@
   "author": "Jack1445",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Jack1445/knowledge-suite.git"
+    "url": "git+https://github.com/Jack1445/obsidian-knowledge-suite.git"
   },
   "scripts": {
     "install:suite": "node scripts/install-suite.mjs",

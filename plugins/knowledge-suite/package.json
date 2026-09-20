@@ -28,7 +28,7 @@
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Jack1445/knowledge-suite.git"
+    "url": "git+https://github.com/Jack1445/obsidian-knowledge-suite.git"
   },
   "dependencies": {
     "@lezer/lr": "^1.4.10",
