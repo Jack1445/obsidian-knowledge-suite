@@ -17,6 +17,15 @@ I build this plugin as a labor of love. Curious about the philosophy behind it? 
 
 <div class="ex-coffee-div"><a href="${URLs.KO_FI_COM_ZSOLT}"><img src="${URLs.CDN_KO_FI_COM_CDN_KOFI3_PNG}" border="0" alt="Buy Me a Coffee at ko-fi.com"  height=45></a></div>
 `,
+  "0.1.0-beta.2": `
+## Knowledge Suite beta 2
+- Added Markdown tag and property management, plus canvas semantic units that can be synchronized across drawings, bound to Markdown files, managed, and renamed inline.
+- Added a read-only semantic filter canvas. It can display units with or without a bound Markdown file, filter by bound-file properties, and move whole units for temporary overview.
+- Added optional default names and storage folders for new 2D and 3D canvases in the streamlined Knowledge Suite settings page.
+- Protected canvas switching and saving so stale view content cannot overwrite another drawing, and corrected 2D canvas edits that appeared saved but disappeared after reopening.
+- Restored managed canvas file interactions and fixed bold text editing ghosting while preserving partial bold styling.
+- Enlarged inline formulas to better match surrounding text and adjusted their baseline across canvas rendering, hit testing, and SVG export.
+`,
   "0.1.0-beta.1": `
 ## Knowledge Suite beta
 - Fixed guarded 2D canvas saves serializing the previous scene instead of current edits. File/load ownership is checked before adopting the current snapshot, while asynchronous scene-replacement protections remain active.
