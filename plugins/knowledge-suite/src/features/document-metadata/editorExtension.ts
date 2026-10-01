@@ -2,7 +2,6 @@ import { type EditorState, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { editorInfoField, editorLivePreviewField } from "obsidian";
 import type DocumentMetadataController from "./DocumentMetadataController";
-import { findDocumentFieldBlocks } from "./fieldBlock";
 import { MarkdownFieldPanel } from "./MarkdownFieldPanel";
 
 class DocumentFieldsWidget extends WidgetType {
@@ -50,19 +49,19 @@ const buildDecorations = (
 ): DecorationSet => {
   const file = state.field(editorInfoField, false)?.file ?? null;
   if (!controller.service.isManagedMarkdownFile(file)) return Decoration.none;
-  const decorations = [
+  const livePreview = state.field(editorLivePreviewField, false) === true;
+  // Live Preview already renders the same panel through the Markdown
+  // post-processor. Mounting a second CodeMirror widget here makes Obsidian's
+  // table editor treat the panel as cell content. Keep this extension for
+  // Source mode only, where the post-processor is not present.
+  if (livePreview) return Decoration.none;
+  return Decoration.set([
     Decoration.widget({
       widget: new DocumentFieldsWidget(controller, file.path),
       block: true,
-      side: -1,
+      side: -10000,
     }).range(0),
-  ];
-  if (state.field(editorLivePreviewField, false) === true) {
-    for (const block of findDocumentFieldBlocks(state.doc.toString())) {
-      decorations.push(Decoration.replace({ block: true }).range(block.start, block.end));
-    }
-  }
-  return Decoration.set(decorations, true);
+  ]);
 };
 
 export const createDocumentFieldsEditorExtension = (
